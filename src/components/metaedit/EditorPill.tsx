@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
 import { BANNER } from "@/lib/springs";
 import { TargetMetadata } from "@/types/metaedit";
@@ -25,6 +25,7 @@ interface EditorPillProps {
   hasSoftLock?: { author: string; color: string } | null;
   busy?: boolean;
   onExitMetaEdit: () => void;
+  webMCPAvailable?: boolean;
 }
 
 export function EditorPill({
@@ -39,32 +40,25 @@ export function EditorPill({
   hasSoftLock,
   busy = false,
   onExitMetaEdit,
+  webMCPAvailable = false,
 }: EditorPillProps) {
   const [instruction, setInstruction] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null);
-
-  // Compute position floating near the annotated element
-  React.useEffect(() => {
-    if (!selectedTarget?.boundingRect) {
-      setCoords(null);
-      return;
-    }
-
+  const coords = React.useMemo(() => {
+    if (!selectedTarget?.boundingRect || typeof window === "undefined") return null;
     const { top, left, width, height } = selectedTarget.boundingRect;
     const viewportWidth = window.innerWidth;
-
-    // Calculate ideal popover position
     const popoverWidth = Math.min(360, viewportWidth - 32);
     let targetLeft = left + width / 2 - popoverWidth / 2;
     if (targetLeft < 16) targetLeft = 16;
     if (targetLeft + popoverWidth > viewportWidth - 16) {
       targetLeft = viewportWidth - popoverWidth - 16;
     }
+    return { top: top + height + 12, left: targetLeft };
+  }, [selectedTarget]);
 
-    let targetTop = top + height + 12; // 12px below the element
-    setCoords({ top: targetTop, left: targetLeft });
-
+  React.useEffect(() => {
+    if (!selectedTarget) return;
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
@@ -138,6 +132,10 @@ export function EditorPill({
               <div className="mx-0.5 h-4 w-px bg-[#191919]/10" />
             </div>
 
+            <span className={cn("hidden md:flex h-8 items-center rounded-full px-2.5 text-[10px] font-medium", webMCPAvailable ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+              {webMCPAvailable ? "Agent tools ready" : "WebMCP unavailable"}
+            </span>
+
             {/* Exit Mode Button */}
             <button
               onClick={onExitMetaEdit}
@@ -198,7 +196,7 @@ export function EditorPill({
                 onChange={(e) => setInstruction(e.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={3}
-                placeholder="Add an optional comment..."
+                placeholder="Describe the change you want your agent to make..."
                 disabled={busy}
                 className="w-full resize-none bg-[#f6f6f6] rounded-md p-3 text-sm text-[#191919] placeholder-[#8f8f8f] outline-none font-normal leading-relaxed border border-transparent focus:border-[#305dde]/30 focus:bg-white transition-colors"
               />
@@ -236,7 +234,7 @@ export function EditorPill({
                         : "bg-[#f6f6f6] text-[#8f8f8f] cursor-not-allowed"
                     )}
                   >
-                    {busy ? "Saving..." : "Save"}
+                    {busy ? "Saving..." : "Add annotation"}
                   </button>
                 </div>
               </div>

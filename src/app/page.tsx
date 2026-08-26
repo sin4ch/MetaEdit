@@ -14,33 +14,23 @@ import { PresenceOverlay } from "@/components/metaedit/PresenceOverlay";
 import { Inspectable } from "@/components/metaedit/Inspectable";
 import { GlobalInspector } from "@/components/metaedit/GlobalInspector";
 import { ToastContainer, ToastItem } from "@/components/ui/Toast";
-import { TargetMetadata, ChangeRequest, Checkpoint, Collaborator } from "@/types/metaedit";
+import { TargetMetadata, MetaEditSession, WorkspaceState } from "@/types/metaedit";
+import { fetchWorkspaceState, focusMetaEditTarget, metaEditRequest } from "@/lib/metaedit-client";
+import { PatchRuntime } from "@/components/metaedit/PatchRuntime";
+import { WebMCPRegistry } from "@/components/metaedit/WebMCPRegistry";
 import {
-  Activity01Icon,
-  UserGroupIcon,
-  ArrowRight01Icon,
-  SecurityCheckIcon,
-  GitCommitIcon,
-  CpuIcon,
-  ZapIcon,
-  Clock01Icon,
   CursorPointer02Icon,
   Globe02Icon,
   Comment01Icon,
   Rocket01Icon,
-  LockKeyIcon,
-  CheckmarkCircle02Icon,
-  Shield01Icon,
 } from "hugeicons-react";
 
 export default function MetaEditPage() {
   const [isMetaEditMode, setIsMetaEditMode] = React.useState(false);
   const [accessModalOpen, setAccessModalOpen] = React.useState(false);
-  const [currentCollaborator, setCurrentCollaborator] = React.useState<{
-    displayName: string;
-    token: string;
-    role: "editor" | "owner";
-  } | null>(null);
+  const [workspaceState, setWorkspaceState] = React.useState<WorkspaceState | null>(null);
+  const [webMCPAvailable, setWebMCPAvailable] = React.useState(false);
+  const [previewChanges, setPreviewChanges] = React.useState(true);
 
   const [isInspecting, setIsInspecting] = React.useState(false);
   const [selectedTarget, setSelectedTarget] = React.useState<TargetMetadata | null>(null);
@@ -50,83 +40,28 @@ export default function MetaEditPage() {
   const [activeTab, setActiveTab] = React.useState("product");
 
   // Selected Brand Logo Variant (1 of 10)
-  const [selectedLogoVariant, setSelectedLogoVariant] = React.useState<LogoVariantType>("origami_prism");
+  const selectedLogoVariant: LogoVariantType = "origami_prism";
 
   // Dynamic interactive element states
-  const [pricingAccent, setPricingAccent] = React.useState<"default" | "emerald">("default");
   const [pricingInterval, setPricingInterval] = React.useState<"monthly" | "yearly">("monthly");
   const [faqOpen, setFaqOpen] = React.useState<number | null>(0);
-
-  const [collaborators, setCollaborators] = React.useState<Collaborator[]>([
-    {
-      id: "user_maya",
-      sessionId: "session_hackathon_82k",
-      displayName: "Maya Chen",
-      role: "editor",
-      color: "#8b5cf6",
-      lastSeenAt: new Date().toISOString(),
-      cursor: { x: 380, y: 460 },
-      activeTarget: "pricing-pro-row",
-    },
-    {
-      id: "user_alex",
-      sessionId: "session_hackathon_82k",
-      displayName: "Alex Rivera",
-      role: "owner",
-      color: "#305dde",
-      lastSeenAt: new Date().toISOString(),
-    },
-  ]);
-
-  const [requests, setRequests] = React.useState<ChangeRequest[]>([]);
-  const [checkpoints, setCheckpoints] = React.useState<Checkpoint[]>([
-    {
-      id: "cp_init_17",
-      sessionId: "session_hackathon_82k",
-      version: 17,
-      commit: "9f4a12b",
-      parentCommit: "8b23ce1",
-      requestId: "req_init",
-      authorId: "user_maya",
-      authorName: "Maya Chen",
-      instruction: "Add prominent 10-logo visual gallery switcher with real icon previews",
-      targetComponent: "LogoGallery",
-      filesChanged: 2,
-      diffSummary: "Updated logo switcher UI with large visual cards in page.tsx",
-      diffCode: [
-        {
-          file: "src/app/page.tsx",
-          oldCode: `<div className="mt-10 flex flex-col items-center">...`,
-          newCode: `<div className="mt-12 w-full max-w-4xl rounded-lg bg-[#f6f6f6] p-6">...`,
-        },
-      ],
-      createdAt: new Date(Date.now() - 1800000).toISOString(),
-    },
-  ]);
 
   const [busyRequest, setBusyRequest] = React.useState(false);
 
   React.useEffect(() => {
+    const requested = window.location.hostname.startsWith("metaedit.") || new URLSearchParams(window.location.search).get("metaedit") === "1";
+    fetchWorkspaceState("public").then(setWorkspaceState).catch(() => undefined);
+    if (!requested) return;
+    fetchWorkspaceState("workspace")
+      .then((state) => { setWorkspaceState(state); setIsMetaEditMode(true); setIsInspecting(true); })
+      .catch(() => setAccessModalOpen(true));
+  }, []);
+
+  React.useEffect(() => {
     if (!isMetaEditMode) return;
-    const interval = setInterval(() => {
-      setCollaborators((prev) =>
-        prev.map((c) => {
-          if (c.id === "user_maya" && c.cursor) {
-            const dx = (Math.random() - 0.5) * 40;
-            const dy = (Math.random() - 0.5) * 30;
-            return {
-              ...c,
-              cursor: {
-                x: Math.max(100, Math.min(window.innerWidth - 100, c.cursor.x + dx)),
-                y: Math.max(150, Math.min(800, c.cursor.y + dy)),
-              },
-            };
-          }
-          return c;
-        })
-      );
-    }, 2800);
-    return () => clearInterval(interval);
+    const refresh = () => metaEditRequest<{ state: WorkspaceState }>("heartbeat").then((response) => setWorkspaceState(response.state)).catch(() => undefined);
+    const interval = window.setInterval(refresh, 2500);
+    return () => window.clearInterval(interval);
   }, [isMetaEditMode]);
 
   const addToast = (title: string, description?: string, tone: "good" | "bad" | "info" = "good") => {
@@ -137,24 +72,21 @@ export default function MetaEditPage() {
     }, 4500);
   };
 
-  const handleAuthorizeSession = (sessionData: {
-    displayName: string;
-    token: string;
-    role: "editor" | "owner";
-  }) => {
-    setCurrentCollaborator(sessionData);
+  const handleAuthorizeSession = ({ session, state }: { session: MetaEditSession; state: WorkspaceState }) => {
+    setWorkspaceState(state);
     setIsMetaEditMode(true);
     setAccessModalOpen(false);
     setIsInspecting(true);
 
     addToast(
       "MetaEdit Authorized",
-      `Welcome ${sessionData.displayName}! Click any element on the page to annotate and request changes.`,
+      `Welcome ${session.collaborator.displayName}. Click any element to leave an annotation for your browser agent.`,
       "good"
     );
   };
 
-  const handleExitMetaEdit = () => {
+  const handleExitMetaEdit = async () => {
+    await metaEditRequest("logout").catch(() => undefined);
     setIsMetaEditMode(false);
     setSelectedTarget(null);
     setIsInspecting(false);
@@ -167,151 +99,42 @@ export default function MetaEditPage() {
     setIsInspecting(false);
   };
 
-  const handleRequestChange = (instruction: string) => {
+  const handleRequestChange = async (instruction: string) => {
     if (!selectedTarget) return;
-
-    const reqId = `req_${Date.now()}`;
-    const authorName = currentCollaborator?.displayName || "Alex Rivera";
-    const authorColor = "#305dde";
-
-    const newReq: ChangeRequest = {
-      id: reqId,
-      sessionId: "session_hackathon_82k",
-      authorId: "user_current",
-      authorName,
-      authorColor,
-      baseVersion: checkpoints[0]?.version || 17,
-      target: selectedTarget,
-      instruction,
-      status: "queued",
-      createdAt: new Date().toISOString(),
-    };
-
-    setRequests((prev) => [newReq, ...prev]);
     setBusyRequest(true);
-    setSelectedTarget(null);
-
-    setTimeout(() => {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === reqId ? { ...r, status: "inspecting_target" } : r))
-      );
-    }, 700);
-
-    setTimeout(() => {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === reqId ? { ...r, status: "editing_source" } : r))
-      );
-    }, 1800);
-
-    setTimeout(() => {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === reqId ? { ...r, status: "running_checks" } : r))
-      );
-    }, 3200);
-
-    setTimeout(() => {
-      const newVersion = (checkpoints[0]?.version || 17) + 1;
-      const newCommit = Math.random().toString(16).substring(2, 9);
-
-      const lower = instruction.toLowerCase();
-      let diffCodeSnippet = {
-        file: `${selectedTarget.source}`,
-        oldCode: `// standard component configuration`,
-        newCode: `// applied instruction: ${instruction}`,
-      };
-
-      if (lower.includes("green") || lower.includes("emerald")) {
-        setPricingAccent("emerald");
-        diffCodeSnippet = {
-          file: "src/app/page.tsx",
-          oldCode: `pricingAccent = "default"`,
-          newCode: `pricingAccent = "emerald" /* applied green tint */`,
-        };
-      }
-
-      const newCheckpoint: Checkpoint = {
-        id: `cp_${Date.now()}`,
-        sessionId: "session_hackathon_82k",
-        version: newVersion,
-        commit: newCommit,
-        parentCommit: checkpoints[0]?.commit || "9f4a12b",
-        requestId: reqId,
-        authorId: "user_current",
-        authorName,
-        instruction,
-        targetComponent: selectedTarget.component,
-        filesChanged: 1,
-        diffSummary: `Applied changes to ${selectedTarget.component} in ${selectedTarget.source}`,
-        diffCode: [diffCodeSnippet],
-        createdAt: new Date().toISOString(),
-      };
-
-      setCheckpoints((prev) => [newCheckpoint, ...prev]);
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === reqId ? { ...r, status: "applied", checkpointId: newCheckpoint.id } : r
-        )
-      );
+    try {
+      const response = await metaEditRequest<{ state: WorkspaceState }>("create_annotation", { target: selectedTarget, comment: instruction });
+      setWorkspaceState(response.state);
+      setSelectedTarget(null);
+      setActivityOpen(true);
+      addToast("Annotation saved", webMCPAvailable ? "Your browser agent can now inspect it and propose a revision." : "Saved for collaborators. Open this page in a WebMCP-capable browser to ask an agent to change it.", "good");
+    } catch (error) {
+      addToast("Could not save annotation", error instanceof Error ? error.message : "Try again.", "bad");
+    } finally {
       setBusyRequest(false);
-
-      addToast(
-        "Checkpoint Created",
-        `Version v${newVersion} (${newCommit}) applied by Codex. Preview updated for all collaborators.`,
-        "good"
-      );
-    }, 4500);
+    }
   };
 
-  const handleRevertCheckpoint = (checkpointId: string) => {
-    const targetCp = checkpoints.find((c) => c.id === checkpointId);
-    if (!targetCp) return;
-
-    const newVersion = (checkpoints[0]?.version || 17) + 1;
-    const newCommit = Math.random().toString(16).substring(2, 9);
-
-    setPricingAccent("default");
-
-    const revertCheckpoint: Checkpoint = {
-      id: `cp_rev_${Date.now()}`,
-      sessionId: "session_hackathon_82k",
-      version: newVersion,
-      commit: newCommit,
-      parentCommit: checkpoints[0]?.commit || "9f4a12b",
-      requestId: `req_revert_${Date.now()}`,
-      authorId: currentCollaborator?.displayName || "Alex Rivera",
-      authorName: currentCollaborator?.displayName || "Alex Rivera",
-      instruction: `Reverted checkpoint ${targetCp.commit}: "${targetCp.instruction}"`,
-      targetComponent: targetCp.targetComponent,
-      filesChanged: 1,
-      diffSummary: `Reverted changes from ${targetCp.commit}`,
-      createdAt: new Date().toISOString(),
-      isRevert: true,
-      revertedCheckpointId: checkpointId,
-    };
-
-    setCheckpoints((prev) => [revertCheckpoint, ...prev]);
-    addToast(
-      "Checkpoint Reverted",
-      `New checkpoint v${newVersion} created to roll back state to v${targetCp.version - 1}.`,
-      "info"
-    );
+  const handleReviewRevision = async (revisionId: string, decision: "approved" | "rejected") => {
+    try {
+      const response = await metaEditRequest<{ state: WorkspaceState }>("review_revision", { revisionId, decision });
+      setWorkspaceState(response.state);
+      addToast(decision === "approved" ? "Revision approved" : "Revision rejected", "Your review is visible to every collaborator.", decision === "approved" ? "good" : "info");
+    } catch (error) { addToast("Review failed", error instanceof Error ? error.message : "Try again.", "bad"); }
   };
 
-  const logoOptions: { id: LogoVariantType; name: string; tag: string }[] = [
-    { id: "hyper_m_cube", name: "01. Hyper M-Cube", tag: "3D Isometric" },
-    { id: "aperture_code_lens", name: "02. Iris Aperture", tag: "Shutter Lens" },
-    { id: "duality_portal", name: "03. Duality Portal", tag: "Möbius Loop" },
-    { id: "quantum_cursor", name: "04. Quantum Cursor", tag: "Orbital Focus" },
-    { id: "isometric_stack", name: "05. Layer Stack", tag: "DOM to Git" },
-    { id: "origami_prism", name: "06. Origami Prism", tag: "Light Facets" },
-    { id: "neural_brackets", name: "07. Neural Code", tag: "Synaptic Brackets" },
-    { id: "vortex_ring", name: "08. Vortex Ring", tag: "Fluid Aperture" },
-    { id: "stepped_glyph", name: "09. Stepped Glyph", tag: "Bauhaus M" },
-    { id: "orbit_ast", name: "10. Orbit AST", tag: "Atomic Tree" },
-  ];
+  const handlePublishRevision = async (revisionId: string) => {
+    try {
+      const response = await metaEditRequest<{ state: WorkspaceState }>("publish_revision", { revisionId });
+      setWorkspaceState(response.state);
+      addToast("Published", "The approved revision is now visible on the public page.", "good");
+    } catch (error) { addToast("Publish blocked", error instanceof Error ? error.message : "Try again.", "bad"); }
+  };
 
   return (
     <div className="relative min-h-screen bg-[#ffffff] text-[#191919]">
+      <PatchRuntime revisions={workspaceState?.revisions ?? []} preview={isMetaEditMode && previewChanges} />
+      <WebMCPRegistry enabled={isMetaEditMode} state={workspaceState} onState={setWorkspaceState} onStatus={setWebMCPAvailable} />
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
 
@@ -323,7 +146,7 @@ export default function MetaEditPage() {
       />
 
       {/* MetaEdit collaborator cursors in editor mode */}
-      {isMetaEditMode && <PresenceOverlay collaborators={collaborators} />}
+      {isMetaEditMode && <PresenceOverlay collaborators={workspaceState?.collaborators ?? []} currentUserId={workspaceState?.currentCollaborator?.id} />}
 
       {/* Header with Morphing Glass Pill */}
       <HeaderMorph>
@@ -473,7 +296,7 @@ export default function MetaEditPage() {
             </h1>
 
             <p className="mt-5 max-w-2xl text-base sm:text-lg leading-relaxed text-[#6e6e6e] text-balance font-normal">
-              Click anywhere on your live website to request changes. AI writes the code and commits directly to Git. MetaEdit stays hidden until you add the <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#305dde]/10 text-[#305dde] font-mono text-sm font-medium">metaedit.</span> subdomain.
+              Annotate any part of your website, let your browser agent propose the change, and publish it after review. MetaEdit stays hidden until you add the <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#305dde]/10 text-[#305dde] font-mono text-sm font-medium">metaedit.</span> subdomain.
             </p>
 
             <div className="mt-8 flex items-center justify-center">
@@ -631,7 +454,7 @@ export default function MetaEditPage() {
               <div className="w-full h-40 flex items-center justify-center shrink-0">
                 <div className="w-full rounded-xl bg-white border border-[#191919]/10 p-3 shadow-sm flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-mono text-[#059669] font-medium">commit 9f4a12b</span>
+                    <span className="font-mono text-[#059669] font-medium">revision v18</span>
                     <span className="rounded-full bg-[#059669]/10 text-[#059669] text-[10px] font-medium px-2 py-0.5">v18</span>
                   </div>
                   <div className="rounded-lg bg-[#f6f6f6] p-2 font-mono text-[11px] space-y-0.5">
@@ -649,7 +472,7 @@ export default function MetaEditPage() {
                 <div className="space-y-1">
                   <h3 className="text-base font-medium text-[#305dde]">Ship it live</h3>
                   <p className="text-base text-[#6e6e6e] leading-relaxed">
-                    Your code updates automatically in git.
+                    Approved revisions publish from the same workspace.
                   </p>
                 </div>
               </div>
@@ -705,7 +528,7 @@ export default function MetaEditPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-[#305dde] font-medium">✓</span>
-                    <span>Instant Git commits & pull requests</span>
+                    <span>Versioned previews and approvals</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-[#305dde] font-medium">✓</span>
@@ -798,28 +621,28 @@ export default function MetaEditPage() {
           <div className="w-full max-w-2xl flex flex-col gap-3">
             {[
               {
-                q: "How does MetaEdit actually edit my codebase?",
-                a: "When you click any element on your page, MetaEdit resolves its exact React component and source line in your repository. When you submit a change request, an AI agent writes clean code edits directly into your project files and commits them to Git in real time.",
+                q: "How does MetaEdit actually change my site?",
+                a: "When you annotate an element, MetaEdit records a stable selector plus its text and style snapshot. Your WebMCP-capable browser agent reads that context and proposes a constrained UI revision. The revision stays in preview until collaborators approve it and the owner publishes it.",
               },
               {
                 q: "Do regular visitors see the editor or cursors?",
                 a: "No. Regular visitors browse your site normally. The editing tools, live cursors, and inspector overlays only appear when you visit your site via the metaedit. subdomain and authenticate with your workspace token.",
               },
               {
-                q: "Does MetaEdit work with my existing Git repository?",
-                a: "Yes. Every single edit creates a clean, linear Git commit with author attribution and diff records. You can inspect diffs, push branches, open pull requests, or roll back with a single click.",
+                q: "Does MetaEdit push changes to my Git repository?",
+                a: "No. MetaEdit deliberately keeps collaboration separate from source deployment. It stores versioned, attributed UI patches, previews them safely, and publishes approved patches to the public rendering without writing to your repository.",
               },
               {
                 q: "What happens if two teammates edit the same element at once?",
-                a: "MetaEdit uses automatic soft-locking. When someone selects or edits a component, their collaborator name and color appear on it, preventing accidental overlapping changes while keeping the rest of the page open for others to edit.",
+                a: "Each annotation and revision has an author, timestamp, target, and version. Conflicting proposals remain separate so collaborators can compare them and approve the one they want to publish.",
               },
               {
                 q: "Does MetaEdit add heavy JavaScript to my production site?",
-                a: "None. The editing runtime and WebMCP server only load during active editing sessions. Your production bundle sent to public visitors remains 100% untouched and lightweight.",
+                a: "Public visitors receive the small patch runtime needed to apply published revisions. The inspector, collaboration panel, and WebMCP tools only activate after MetaEdit authentication.",
               },
               {
                 q: "Can I self-host MetaEdit on my own infrastructure?",
-                a: "Yes. MetaEdit is built on open standards and WebMCP protocols. You can run the editing engine and session bridge locally, in Docker, or on your own private cloud servers.",
+                a: "Yes. MetaEdit uses the WebMCP browser API and a durable SQLite-compatible store. This demo is configured for OpenAI Sites and Cloudflare D1, and the application code remains portable.",
               },
             ].map((faq, idx) => {
               const isOpen = faqOpen === idx;
@@ -904,15 +727,12 @@ export default function MetaEditPage() {
           onClearTarget={() => setSelectedTarget(null)}
           onRequestChange={handleRequestChange}
           onToggleActivity={() => setActivityOpen(!activityOpen)}
-          collaboratorCount={collaborators.length}
-          activityCount={requests.filter((r) => r.status !== "applied").length}
-          hasSoftLock={
-            selectedTarget?.instanceId === "pricing-pro-row"
-              ? { author: "Maya", color: "#8b5cf6" }
-              : null
-          }
+          collaboratorCount={workspaceState?.collaborators.length ?? 1}
+          activityCount={(workspaceState?.annotations.filter((item) => item.status === "open").length ?? 0) + (workspaceState?.revisions.filter((item) => item.status === "proposed").length ?? 0)}
+          hasSoftLock={null}
           busy={busyRequest}
           onExitMetaEdit={handleExitMetaEdit}
+          webMCPAvailable={webMCPAvailable}
         />
       )}
 
@@ -920,12 +740,12 @@ export default function MetaEditPage() {
       <ActivityPanel
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
-        requests={requests}
-        checkpoints={checkpoints}
-        onRevertCheckpoint={handleRevertCheckpoint}
-        onPreviewCheckpoint={(cp) => {
-          addToast("Previewing Checkpoint", `Viewing state from commit ${cp.commit}`, "info");
-        }}
+        state={workspaceState}
+        preview={previewChanges}
+        onTogglePreview={() => setPreviewChanges((value) => !value)}
+        onFocus={(selector) => { focusMetaEditTarget(selector); setActivityOpen(false); }}
+        onReview={handleReviewRevision}
+        onPublish={handlePublishRevision}
       />
     </div>
   );

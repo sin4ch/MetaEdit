@@ -2,7 +2,6 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
-import { cn } from "@/lib/cn";
 import { CheckmarkCircle02Icon, AlertCircleIcon, InformationCircleIcon, Cancel01Icon } from "hugeicons-react";
 
 export interface ToastItem {

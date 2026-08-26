@@ -18,6 +18,9 @@ interface RectBox {
   componentName: string;
   elementId: string;
   sourceFile: string;
+  selector: string;
+  textSnapshot: string;
+  styleSnapshot: Record<string, string>;
 }
 
 export function GlobalInspector({
@@ -37,7 +40,7 @@ export function GlobalInspector({
     // Check data attributes or class/tag
     const customComponent = el.getAttribute("data-component");
     const customSource = el.getAttribute("data-source");
-    const customId = el.getAttribute("data-instance-id") || el.id;
+    const customId = el.getAttribute("data-instance-id") || el.getAttribute("data-metaedit-id") || el.id;
 
     let componentName = customComponent;
     if (!componentName) {
@@ -63,7 +66,13 @@ export function GlobalInspector({
     }
 
     const sourceFile = customSource || `src/app/page.tsx`;
-    const elementId = customId || `${componentName.toLowerCase()}-${Math.floor(rect.top)}`;
+    const stablePath = getStablePath(el);
+    const elementId = customId || `target-${hashString(stablePath)}`;
+    if (!el.dataset.metaeditId) el.dataset.metaeditId = elementId;
+    const computed = window.getComputedStyle(el);
+    const styleSnapshot = Object.fromEntries(
+      ["color", "backgroundColor", "borderColor", "borderRadius", "fontSize", "fontWeight", "letterSpacing", "lineHeight", "textAlign", "padding", "margin", "gap", "width", "maxWidth", "minHeight", "opacity"].map((property) => [property, computed[property as keyof CSSStyleDeclaration] as string])
+    );
 
     return {
       top: rect.top + scrollY,
@@ -74,14 +83,14 @@ export function GlobalInspector({
       componentName,
       elementId,
       sourceFile,
+      selector: stablePath,
+      textSnapshot: el.textContent?.trim() ?? "",
+      styleSnapshot,
     };
   };
 
   React.useEffect(() => {
-    if (!isInspecting) {
-      setHoverRect(null);
-      return;
-    }
+    if (!isInspecting) return;
 
     const isIgnored = (target: HTMLElement | null): boolean => {
       if (!target) return true;
@@ -117,6 +126,9 @@ export function GlobalInspector({
         component: meta.componentName,
         source: meta.sourceFile,
         instanceId: meta.elementId,
+        selector: meta.selector,
+        textSnapshot: meta.textSnapshot,
+        styleSnapshot: meta.styleSnapshot,
         boundingRect: {
           top: meta.top,
           left: meta.left,
@@ -158,13 +170,6 @@ export function GlobalInspector({
       window.removeEventListener("touchend", handleTouchEnd, { capture: true });
     };
   }, [isInspecting, onSelectTarget]);
-
-  // Update selected rect on scroll / window resize
-  React.useEffect(() => {
-    if (!selectedTarget) {
-      setSelectedRect(null);
-    }
-  }, [selectedTarget]);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 overflow-visible" data-metaedit-chrome="true">
@@ -212,7 +217,7 @@ export function GlobalInspector({
       )}
 
       {/* Selected Rect: Clean blue highlight */}
-      {selectedRect && (
+      {selectedTarget && selectedRect && (
         <div
           style={{
             position: "absolute",
@@ -230,4 +235,23 @@ export function GlobalInspector({
       )}
     </div>
   );
+}
+
+function getStablePath(element: HTMLElement) {
+  const parts: string[] = [];
+  let current: HTMLElement | null = element;
+  while (current && current !== document.body && parts.length < 8) {
+    const tag = current.tagName.toLowerCase();
+    const siblings = current.parentElement ? Array.from(current.parentElement.children).filter((item) => item.tagName === current!.tagName) : [];
+    const index = Math.max(1, siblings.indexOf(current) + 1);
+    parts.unshift(`${tag}:nth-of-type(${index})`);
+    current = current.parentElement;
+  }
+  return parts.join(" > ");
+}
+
+function hashString(value: string) {
+  let hash = 2166136261;
+  for (const character of value) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  return (hash >>> 0).toString(36);
 }

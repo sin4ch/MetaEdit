@@ -1,12 +1,14 @@
-export type UserRole = "visitor" | "reviewer" | "editor" | "owner";
+export type UserRole = "visitor" | "editor" | "owner";
+export type AnnotationStatus = "open" | "resolved";
+export type RevisionStatus = "proposed" | "approved" | "published" | "rejected";
+export type ApprovalDecision = "approved" | "rejected";
 
 export interface Collaborator {
   id: string;
-  sessionId: string;
   displayName: string;
   role: UserRole;
   color: string;
-  avatar?: string;
+  email?: string | null;
   lastSeenAt: string;
   cursor?: { x: number; y: number };
   activeTarget?: string;
@@ -16,79 +18,85 @@ export interface TargetMetadata {
   component: string;
   source: string;
   instanceId: string;
+  selector: string;
+  textSnapshot: string;
+  styleSnapshot: Record<string, string>;
   description?: string;
   propsSummary?: Record<string, string | number | boolean>;
-  boundingRect?: {
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-  };
+  boundingRect?: { top: number; left: number; width: number; height: number };
 }
 
-export type RequestStatus =
-  | "draft"
-  | "queued"
-  | "inspecting_target"
-  | "editing_source"
-  | "running_checks"
-  | "applied"
-  | "failed"
-  | "stale"
-  | "conflict"
-  | "reverted";
-
-export interface ChangeRequest {
+export interface Annotation {
   id: string;
-  sessionId: string;
   authorId: string;
   authorName: string;
-  authorColor: string;
+  targetId: string;
+  selector: string;
+  component: string;
+  source: string;
+  textSnapshot: string;
+  styleSnapshot: Record<string, string>;
+  comment: string;
+  status: AnnotationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EditableStyleProperty = "color" | "backgroundColor" | "borderColor" | "borderRadius" | "fontSize" | "fontWeight" | "letterSpacing" | "lineHeight" | "textAlign" | "padding" | "margin" | "gap" | "width" | "maxWidth" | "minHeight" | "opacity";
+
+export type PatchOperation =
+  | { op: "replace_text"; selector: string; value: string }
+  | { op: "set_style"; selector: string; property: EditableStyleProperty; value: string }
+  | { op: "set_visibility"; selector: string; visible: boolean };
+
+export interface Approval {
+  id: string;
+  revisionId: string;
+  collaboratorId: string;
+  collaboratorName: string;
+  decision: ApprovalDecision;
+  createdAt: string;
+}
+
+export interface Revision {
+  id: string;
+  annotationId?: string | null;
+  authorId: string;
+  authorName: string;
+  instruction: string;
   baseVersion: number;
-  target: TargetMetadata;
-  instruction: string;
-  queuePosition?: number;
-  status: RequestStatus;
-  error?: string;
-  checkpointId?: string;
+  version: number;
+  status: RevisionStatus;
+  patch: PatchOperation[];
+  before: PatchOperation[];
+  approvals: Approval[];
   createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
+  updatedAt: string;
+  publishedAt?: string | null;
 }
 
-export interface Checkpoint {
+export interface ActivityEvent {
   id: string;
-  sessionId: string;
-  version: number;
-  commit: string;
-  parentCommit: string;
-  requestId: string;
-  authorId: string;
-  authorName: string;
-  instruction: string;
-  targetComponent: string;
-  filesChanged: number;
-  diffSummary: string;
-  diffCode?: {
-    file: string;
-    oldCode: string;
-    newCode: string;
-  }[];
+  kind: string;
+  actorId: string;
+  actorName: string;
+  entityId: string;
+  message: string;
   createdAt: string;
-  isRevert?: boolean;
-  revertedCheckpointId?: string;
 }
 
-export interface SessionState {
-  id: string;
-  name: string;
-  repository: string;
-  branch: string;
-  headCommit: string;
-  version: number;
-  status: "active" | "locked" | "archived";
+export interface MetaEditSession {
+  collaborator: Collaborator;
+  workspaceId: string;
+  workspaceName: string;
+  expiresAt: string;
+}
+
+export interface WorkspaceState {
+  workspace: { id: string; name: string; publishedVersion: number; latestVersion: number };
+  currentCollaborator: Collaborator | null;
   collaborators: Collaborator[];
-  requests: ChangeRequest[];
-  checkpoints: Checkpoint[];
-  createdAt: string;
+  annotations: Annotation[];
+  revisions: Revision[];
+  activity: ActivityEvent[];
 }

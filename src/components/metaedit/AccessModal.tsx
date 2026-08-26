@@ -5,20 +5,22 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { MetaEditLogo } from "@/components/ui/Logo";
 import { ArrowRight01Icon, Cancel01Icon } from "hugeicons-react";
+import { metaEditRequest } from "@/lib/metaedit-client";
+import type { MetaEditSession, WorkspaceState } from "@/types/metaedit";
 
 interface AccessModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess: (session: { displayName: string; token: string; role: "editor" | "owner" }) => void;
+  onSuccess: (result: { session: MetaEditSession; state: WorkspaceState }) => void;
 }
 
 export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
   const [displayName, setDisplayName] = React.useState("Alex Rivera");
-  const [token, setToken] = React.useState("metaedit_hackathon_demo");
+  const [token, setToken] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) {
       setError("Please enter a collaborator name.");
@@ -32,18 +34,18 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
     setLoading(true);
     setError(null);
 
-    setTimeout(() => {
+    try {
+      const result = await metaEditRequest<{ session: MetaEditSession; state: WorkspaceState }>("login", {
+        displayName: displayName.trim(),
+        token: token.trim(),
+      });
       setLoading(false);
-      if (token === "metaedit_hackathon_demo" || token.length >= 6) {
-        onSuccess({
-          displayName: displayName.trim(),
-          token: token.trim(),
-          role: "editor",
-        });
-      } else {
-        setError("Invalid access token. Try using the demo token.");
-      }
-    }, 500);
+      setToken("");
+      onSuccess(result);
+    } catch (caught) {
+      setLoading(false);
+      setError(caught instanceof Error ? caught.message : "Could not enter the workspace.");
+    }
   };
 
   return (
@@ -97,7 +99,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
                 onClick={() => setToken("metaedit_hackathon_demo")}
                 className="text-xs text-primary hover:underline cursor-pointer font-medium"
               >
-                Fill demo token
+                Use local demo token
               </button>
             </div>
             <input

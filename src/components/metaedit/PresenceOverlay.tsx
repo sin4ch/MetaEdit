@@ -3,7 +3,6 @@
 import * as React from "react";
 import { motion } from "motion/react";
 import { Collaborator } from "@/types/metaedit";
-import { MousePointer } from "lucide-react";
 
 interface PresenceOverlayProps {
   collaborators: Collaborator[];

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/cn";
 import {
   ArrowLeftRightIcon,
   FilterIcon,
@@ -52,7 +51,7 @@ export function ComparisonSlider() {
     return () => observer.disconnect();
   }, []);
 
-  const handleMove = (clientX: number) => {
+  const handleMove = React.useCallback((clientX: number) => {
     if (!containerRef.current) return;
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -65,7 +64,7 @@ export function ComparisonSlider() {
       const clampedPct = Math.max(2, Math.min(maxVisiblePercent, rawPct));
       setSliderPos(clampedPct);
     });
-  };
+  }, [maxVisiblePercent]);
 
   React.useEffect(() => {
     const handleGlobalEnd = () => {
@@ -93,7 +92,7 @@ export function ComparisonSlider() {
       window.removeEventListener("touchend", handleGlobalEnd);
       window.removeEventListener("touchmove", handleGlobalTouchMove);
     };
-  }, [maxVisiblePercent]);
+  }, [handleMove]);
 
   return (
     <div className="@container w-full flex flex-col items-center">
