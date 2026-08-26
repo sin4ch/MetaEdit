@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #1f1f1f;
+
+  /* stage and surfaces: OA two-layer plate architecture */
+  --background: #f6f6f6; /* quiet grey stage */
+  --card: #ffffff;        /* white surface plate */
+  --popover: #ffffff;
+  --foreground: #191919;  /* deep ink foreground */
+  --card-foreground: #191919;
+
+  /* ink-derived grey hierarchy */
+  --border: color-mix(in srgb, var(--ink) 12%, transparent);
+  --border-subtle: color-mix(in srgb, var(--ink) 7%, transparent);
+  --input: color-mix(in srgb, var(--ink) 14%, transparent);
+  --accent: color-mix(in srgb, var(--ink) 4%, transparent);
+  --accent-foreground: var(--ink);
+  --muted: color-mix(in srgb, var(--ink) 4%, transparent);
+
+  /* Text grey hierarchy */
+  --text-primary: #191919;    /* 100% ink contrast */
+  --text-secondary: #6e6e6e;  /* OA subtitle grey */
+  --text-tertiary: #8f8f8f;   /* OA caption & meta grey */
+  --text-quaternary: #b5b5b5; /* OA subtle border / disabled grey */
+  --muted-foreground: var(--text-secondary);
+
+  /* the one accent, and its focus ring */
+  --primary: #305dde;
+  --primary-foreground: #ffffff;
+  --ring: #3ba6f1;
+
+  /* secondary controls */
+  --secondary: #ededed;
+  --secondary-foreground: var(--ink);
+
+  /* semantic tints */
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0.505 0.213 27.518);
+  --success: oklch(0.596 0.145 163.225);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.488 0.243 264.376);
+
+  /* radius */
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* elevation */
+  --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-floating: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: 'SF Pro Rounded', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 body {
-  background: var(--background);
+  background: #ffffff;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: clip;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  letter-spacing: 0 !important;
+}
+
+/* GPU Hardware Acceleration Utilities */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+}
+
+/* Skeleton animation with GPU acceleration */
+@keyframes oa-skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Data arrives by focus / blur */
+@keyframes oa-arrive {
+  from {
+    opacity: 0.4;
+    filter: blur(4px);
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0);
+  }
+}
+.oa-arrive {
+  animation: oa-arrive 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, filter, transform;
+  transform: translateZ(0);
+}
+
+/* Scroll reveal with 3D transform acceleration */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0s);
+  will-change: opacity, transform;
+}
+.reveal.is-inview {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .oa-arrive {
+    animation: none;
+  }
 }
