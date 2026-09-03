@@ -101,6 +101,8 @@ Suggested testing credentials for the submission form are the display name `Alex
 
 The remaining submission work is external to this repository: provide a working live URL, record a public video under three minutes with audio, complete the Devpost form, and verify the public repository from an incognito window. This repository includes the source, setup instructions, WebMCP tool list, and MIT license needed for that handoff.
 
+The copy, testing notes, screenshot plan, and video outline are collected in [`devpost-submission.md`](devpost-submission.md). It is a local draft and does not submit anything to Devpost.
+
 ## References
 
 - [WebMCP specification](https://webmachinelearning.github.io/webmcp/)
