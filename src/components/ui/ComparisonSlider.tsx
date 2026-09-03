@@ -347,6 +347,52 @@ export function ComparisonSlider() {
                 </div>
               </div>
 
+              {/* Demo-only collaborator cursors. These are illustrative and are not
+                  connected to the live MetaEdit presence layer above the page. */}
+              <div
+                style={{
+                  left: "clamp(132px, calc(88.784cqw - 186.734px), 72%)",
+                  top: "clamp(8px, calc(17.944cqw - 56.418px), 22%)",
+                }}
+                className="absolute z-40 flex items-start gap-1.5 pointer-events-none"
+                aria-hidden="true"
+              >
+                <svg
+                  className="size-5 -translate-x-0.5 -translate-y-0.5 drop-shadow-md"
+                  viewBox="0 0 24 24"
+                  fill="#8b5cf6"
+                  stroke="white"
+                  strokeWidth="1.5"
+                >
+                  <path d="M5.653 4.295A1 1 0 004 5.12v13.76a1 1 0 001.653.825l3.963-3.303a1 1 0 01.64-.236h6.744a1 1 0 00.707-1.707L5.653 4.295z" />
+                </svg>
+                <div className="rounded-full bg-[#8b5cf6] px-3 py-1 text-xs font-medium text-white shadow-sm whitespace-nowrap">
+                  Maya Chen
+                </div>
+              </div>
+
+              <div
+                style={{
+                  left: "clamp(160px, calc(70.234cqw - 92.138px), 62%)",
+                  top: "clamp(68%, calc(544.734px - 9.675cqw), 510px)",
+                }}
+                className="absolute z-40 flex items-start gap-1.5 pointer-events-none"
+                aria-hidden="true"
+              >
+                <svg
+                  className="size-5 -translate-x-0.5 -translate-y-0.5 drop-shadow-md"
+                  viewBox="0 0 24 24"
+                  fill="#eab308"
+                  stroke="white"
+                  strokeWidth="1.5"
+                >
+                  <path d="M5.653 4.295A1 1 0 004 5.12v13.76a1 1 0 001.653.825l3.963-3.303a1 1 0 01.64-.236h6.744a1 1 0 00.707-1.707L5.653 4.295z" />
+                </svg>
+                <div className="rounded-full bg-[#eab308] px-3 py-1 text-xs font-medium text-[#191919] shadow-sm whitespace-nowrap">
+                  Alex Rivera
+                </div>
+              </div>
+
               {/* Exact Live In-App Toolbar Pill: Centered across all viewports */}
               <div className="self-center mx-auto flex items-center gap-0.5 rounded-full border border-[#191919]/10 bg-[#ffffff]/95 backdrop-blur-xl p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] z-30 select-none">
                 <div className="flex size-8 items-center justify-center rounded-full bg-transparent text-[#6e6e6e]" aria-label="Activity">
