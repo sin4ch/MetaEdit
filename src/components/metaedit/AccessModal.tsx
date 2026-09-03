@@ -96,7 +96,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
               </label>
               <button
                 type="button"
-                onClick={() => setToken("metaedit_hackathon_demo")}
+                onClick={() => setToken("WEBMCP")}
                 className="text-xs text-primary hover:underline cursor-pointer font-medium"
               >
                 Use local demo token
@@ -106,7 +106,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
               type="password"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="metaedit_..."
+              placeholder="WEBMCP"
               className="h-11 w-full rounded-md bg-[#f6f6f6] px-4 font-mono text-base text-[#191919] placeholder-[#8f8f8f] outline-none transition-colors border border-transparent focus:border-[#305dde]/40 focus:bg-white"
             />
           </div>

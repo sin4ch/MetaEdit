@@ -5,7 +5,7 @@ import type { Collaborator } from "@/types/metaedit";
 
 const COOKIE_NAME = "metaedit_session";
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
-const DEMO_TOKEN_HASH = "eb1529b807f80ebe6a06dd224623549f4e9ee5b8ebe996c23102ede85fdd598d";
+const DEMO_TOKEN_HASH = "e053d94124812256a0cba1536e35354c5a99b4678da026c5d7f867de7f36574f";
 const encoder = new TextEncoder();
 
 function bytesToHex(bytes: Uint8Array) { return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""); }

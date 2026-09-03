@@ -1,10 +1,11 @@
 import type { PatchOperation, WorkspaceState } from "@/types/metaedit";
 
-export async function metaEditRequest<T = Record<string, unknown>>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
+export async function metaEditRequest<T = Record<string, unknown>>(action: string, payload: Record<string, unknown> = {}, options: { signal?: AbortSignal } = {}): Promise<T> {
   const response = await fetch("/api/metaedit", {
     method: "POST",
     headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
     body: JSON.stringify({ action, ...payload }),
+    signal: options.signal,
   });
   const body = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? `MetaEdit request failed (${response.status}).`);

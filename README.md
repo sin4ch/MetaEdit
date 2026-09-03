@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MetaEdit
 
-## Getting Started
+MetaEdit turns a website into a shared editing workspace. Visitors see the normal page. A collaborator opens the same page through the `metaedit.` subdomain, authenticates, clicks an element, and leaves a targeted change request. A WebMCP-capable browser agent can read that request and create a constrained preview. Collaborators review it together, then the workspace owner publishes it.
 
-First, run the development server:
+The product idea is simple: edit software from inside the software.
+
+## What this demo proves
+
+MetaEdit uses the browser's WebMCP API instead of a separate chat or proxy. After authentication, the page registers tools on `document.modelContext`:
+
+| Tool | Purpose |
+| --- | --- |
+| `metaedit_get_workspace` | Read the current version, collaborators, annotations, revisions, and approvals. |
+| `metaedit_list_annotations` | List open, resolved, or all annotations with attribution and target snapshots. |
+| `metaedit_inspect_annotation` | Read one annotation and its related revisions before changing anything. |
+| `metaedit_create_annotation` | Save a comment against a stable page selector. |
+| `metaedit_propose_revision` | Save a preview-only text, style, or visibility patch for an annotation. |
+| `metaedit_review_revision` | Approve or reject a proposed revision. |
+| `metaedit_publish_revision` | Publish an approved revision. Owner access and active approvals are required. |
+| `metaedit_focus_target` | Scroll to and highlight the annotated element for the human collaborator. |
+
+The tools call the same application API used by the UI. Every mutating request carries an idempotency key. The server validates selectors and limits edits to an allowlist of safe operations. Annotation and revision text is marked as untrusted content for agents.
+
+## Run it locally
+
+Requirements: Node.js 22.13 or newer and npm.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The dev script binds to `0.0.0.0`, so the server is reachable from the in-app browser and other devices on the local network.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To enter the editing workspace:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Click **Enter MetaEdit**.
+2. Enter a display name.
+3. Click **Use local demo token**, or enter `WEBMCP`.
+4. Click **Enter Workspace**.
 
-## Learn More
+The local demo uses a SQLite-compatible D1 binding supplied by the Cloudflare/Vinext dev runtime. The first API request creates the tables and the default `MetaEdit` workspace automatically. Local state is stored by the dev runtime and is not production data.
 
-To learn more about Next.js, take a look at the following resources:
+## Configuration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The local fallback token is `WEBMCP`. It is intended only for this demo. Production deployments must set both secrets below and should not rely on the fallback values.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable | Description |
+| --- | --- |
+| `METAEDIT_SESSION_TOKEN_HASH` | SHA-256 hex digest of the workspace token. The server compares it in constant time. |
+| `METAEDIT_COOKIE_SECRET` | Secret used to sign the HTTP-only session cookie. |
 
-## Deploy on Vercel
+Example hash generation:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+printf 'WEBMCP' | sha256sum
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The app reads the `DB` D1 binding from `cloudflare:workers`. `.openai/hosting.json` identifies the hosting project and binding name used by the local Vite configuration. A Cloudflare deployment needs a real D1 database ID, the schema migration, and both secrets configured in the target environment.
+
+## How the app is structured
+
+- `src/app/page.tsx` contains the visitor page and the authenticated editing surface.
+- `src/components/metaedit/GlobalInspector.tsx` collects stable selectors, text, and computed-style snapshots.
+- `src/components/metaedit/WebMCPRegistry.tsx` registers the page tools and unregisters them by aborting the registration signal, which follows the WebMCP API.
+- `src/app/api/metaedit/route.ts` authenticates collaborators and handles annotations, revisions, reviews, publishing, heartbeats, and logout.
+- `src/lib/metaedit-contract.ts` validates target metadata and the safe patch contract.
+- `src/lib/server/metaedit-db.ts` owns the D1 schema bootstrap and workspace reads.
+- `src/components/metaedit/PatchRuntime.tsx` applies previews or published patches in the page without injecting HTML or scripts.
+
+The public page requests only published revisions. The inspector, activity panel, presence overlay, and WebMCP tools activate after authentication. The URL changes the entry surface, but the token still grants the authority.
+
+## Test the core flow
+
+Run the static checks:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+npx vinext check
+```
+
+Manual browser check:
+
+1. Load the local page as a visitor and confirm that editing controls are absent.
+2. Enter the workspace with `WEBMCP`.
+3. Click a visible element and save an annotation.
+4. Open **Activity** and confirm the author, comment, target, and selector are shown.
+5. In a WebMCP-capable browser agent, call `metaedit_list_annotations`, inspect the annotation, and propose a patch against its `selector` and `baseVersion`.
+6. Toggle the before/after view, approve the revision, and publish it as the workspace owner.
+7. Leave the workspace and confirm the visitor page shows only published changes.
+
+## Challenge submission notes
+
+The repository is the source of truth for the demo. The written story for the submission is:
+
+> MetaEdit lets a human point at a live interface and leave an attributed request. A browser agent reads the page's WebMCP tools, inspects the annotation and current checkpoint, and proposes a constrained revision. The result remains a shared preview until collaborators approve it. The owner publishes from the same page, so the agent can help with implementation without taking the final decision away from the people reviewing the UI.
+
+Suggested testing credentials for the submission form are the display name `Alex Rivera` and the local/demo token `WEBMCP`. Do not use the fallback token for a public production deployment.
+
+The remaining submission work is external to this repository: provide a working live URL, record a public video under three minutes with audio, complete the Devpost form, and verify the public repository from an incognito window. This repository includes the source, setup instructions, WebMCP tool list, and MIT license needed for that handoff.
+
+## References
+
+- [WebMCP specification](https://webmachinelearning.github.io/webmcp/)
+- [The WebMCP Challenge](https://webmcp.devpost.com/)
+- [Cloudflare's Next.js/Vinext guidance](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/)
+
+## License
+
+MIT. See [LICENSE](LICENSE).
