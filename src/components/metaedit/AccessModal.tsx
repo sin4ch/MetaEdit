@@ -15,7 +15,7 @@ interface AccessModalProps {
 }
 
 export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
-  const [displayName, setDisplayName] = React.useState("Alex Rivera");
+  const [displayName, setDisplayName] = React.useState("");
   const [token, setToken] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -83,7 +83,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Maya Chen"
+              placeholder="Your name"
               className="h-11 w-full rounded-md bg-[#f6f6f6] px-4 text-base text-[#191919] placeholder-[#8f8f8f] outline-none transition-colors border border-transparent focus:border-[#305dde]/40 focus:bg-white"
             />
           </div>
@@ -99,7 +99,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
                 onClick={() => setToken("WEBMCP")}
                 className="text-xs text-primary hover:underline cursor-pointer font-medium"
               >
-                Use local demo token
+                Use demo token
               </button>
             </div>
             <input

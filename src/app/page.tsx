@@ -13,9 +13,10 @@ import { ActivityPanel } from "@/components/metaedit/ActivityPanel";
 import { PresenceOverlay } from "@/components/metaedit/PresenceOverlay";
 import { Inspectable } from "@/components/metaedit/Inspectable";
 import { GlobalInspector } from "@/components/metaedit/GlobalInspector";
+import { Modal } from "@/components/ui/Modal";
 import { ToastContainer, ToastItem } from "@/components/ui/Toast";
-import { TargetMetadata, MetaEditSession, WorkspaceState } from "@/types/metaedit";
-import { fetchWorkspaceState, focusMetaEditTarget, metaEditRequest } from "@/lib/metaedit-client";
+import type { Annotation, TargetMetadata, MetaEditSession, WorkspaceState } from "@/types/metaedit";
+import { fetchWorkspaceState, focusMetaEditRegion, focusMetaEditTarget, metaEditRequest } from "@/lib/metaedit-client";
 import { PatchRuntime } from "@/components/metaedit/PatchRuntime";
 import { WebMCPRegistry } from "@/components/metaedit/WebMCPRegistry";
 import {
@@ -30,11 +31,15 @@ export default function MetaEditPage() {
   const [accessModalOpen, setAccessModalOpen] = React.useState(false);
   const [workspaceState, setWorkspaceState] = React.useState<WorkspaceState | null>(null);
   const [webMCPAvailable, setWebMCPAvailable] = React.useState(false);
-  const [previewChanges, setPreviewChanges] = React.useState(true);
+  const [comparison, setComparison] = React.useState<{ revisionId: string; mode: "before" | "after" } | null>(null);
 
   const [isInspecting, setIsInspecting] = React.useState(false);
   const [selectedTarget, setSelectedTarget] = React.useState<TargetMetadata | null>(null);
   const [activityOpen, setActivityOpen] = React.useState(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = React.useState(false);
+  const [inspectTipDismissed, setInspectTipDismissed] = React.useState(false);
+  const activityButtonRef = React.useRef<HTMLButtonElement>(null);
+  const cursorRef = React.useRef<{ x: number; y: number } | null>(null);
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("product");
@@ -53,15 +58,49 @@ export default function MetaEditPage() {
     fetchWorkspaceState("public").then(setWorkspaceState).catch(() => undefined);
     if (!requested) return;
     fetchWorkspaceState("workspace")
-      .then((state) => { setWorkspaceState(state); setIsMetaEditMode(true); setIsInspecting(true); })
+      .then((state) => { setWorkspaceState(state); setIsMetaEditMode(true); setIsInspecting(true); setInspectTipDismissed(false); })
       .catch(() => setAccessModalOpen(true));
   }, []);
 
   React.useEffect(() => {
     if (!isMetaEditMode) return;
-    const refresh = () => metaEditRequest<{ state: WorkspaceState }>("heartbeat").then((response) => setWorkspaceState(response.state)).catch(() => undefined);
-    const interval = window.setInterval(refresh, 2500);
-    return () => window.clearInterval(interval);
+    const timeout = window.setTimeout(() => setInspectTipDismissed(true), 7000);
+    return () => window.clearTimeout(timeout);
+  }, [isMetaEditMode]);
+
+  React.useEffect(() => {
+    if (!isMetaEditMode) return;
+    let requestInFlight = false;
+    const refresh = () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      const cursor = cursorRef.current;
+      metaEditRequest<{ state: WorkspaceState }>("heartbeat", { cursor })
+        .then((response) => setWorkspaceState(response.state))
+        .catch(() => undefined)
+        .finally(() => { requestInFlight = false; });
+    };
+    const updateCursor = (event: PointerEvent) => {
+      cursorRef.current = { x: event.clientX, y: event.clientY };
+    };
+    const clearCursor = () => {
+      if (cursorRef.current === null) return;
+      cursorRef.current = null;
+      refresh();
+    };
+    window.addEventListener("pointermove", updateCursor, { passive: true });
+    window.addEventListener("pointerleave", clearCursor, { passive: true });
+    window.addEventListener("blur", clearCursor, { passive: true });
+    document.addEventListener("visibilitychange", clearCursor);
+    const interval = window.setInterval(refresh, 750);
+    refresh();
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pointermove", updateCursor);
+      window.removeEventListener("pointerleave", clearCursor);
+      window.removeEventListener("blur", clearCursor);
+      document.removeEventListener("visibilitychange", clearCursor);
+    };
   }, [isMetaEditMode]);
 
   const addToast = (title: string, description?: string, tone: "good" | "bad" | "info" = "good") => {
@@ -77,6 +116,7 @@ export default function MetaEditPage() {
     setIsMetaEditMode(true);
     setAccessModalOpen(false);
     setIsInspecting(true);
+    setInspectTipDismissed(false);
 
     addToast(
       "MetaEdit Authorized",
@@ -85,18 +125,36 @@ export default function MetaEditPage() {
     );
   };
 
+  const requestExitMetaEdit = () => setExitConfirmOpen(true);
+
   const handleExitMetaEdit = async () => {
+    setExitConfirmOpen(false);
     await metaEditRequest("logout").catch(() => undefined);
     setIsMetaEditMode(false);
     setSelectedTarget(null);
     setIsInspecting(false);
     setActivityOpen(false);
+    setComparison(null);
     addToast("Visitor Mode", "Exited MetaEdit workspace. Back to visitor mode.", "info");
   };
+
+  const handleCompareRevision = React.useCallback((revisionId: string | null, mode: "before" | "after" | null) => {
+    setComparison(revisionId && mode ? { revisionId, mode } : null);
+  }, []);
 
   const handleSelectTarget = (target: TargetMetadata) => {
     setSelectedTarget(target);
     setIsInspecting(false);
+  };
+
+  const handleSelectRegion = (target: TargetMetadata) => {
+    setSelectedTarget(target);
+    setIsInspecting(false);
+  };
+
+  const handleClearTarget = () => {
+    setSelectedTarget(null);
+    setIsInspecting(true);
   };
 
   const handleRequestChange = async (instruction: string) => {
@@ -106,6 +164,7 @@ export default function MetaEditPage() {
       const response = await metaEditRequest<{ state: WorkspaceState }>("create_annotation", { target: selectedTarget, comment: instruction });
       setWorkspaceState(response.state);
       setSelectedTarget(null);
+      setIsInspecting(true);
       setActivityOpen(true);
       addToast("Annotation saved", webMCPAvailable ? "Your browser agent can now inspect it and propose a revision." : "Saved for collaborators. Open this page in a WebMCP-capable browser to ask an agent to change it.", "good");
     } catch (error) {
@@ -133,7 +192,7 @@ export default function MetaEditPage() {
 
   return (
     <div className="relative min-h-screen bg-[#ffffff] text-[#191919]">
-      <PatchRuntime revisions={workspaceState?.revisions ?? []} preview={isMetaEditMode && previewChanges} />
+      <PatchRuntime revisions={workspaceState?.revisions ?? []} preview={isMetaEditMode} comparison={comparison} />
       <WebMCPRegistry enabled={isMetaEditMode} state={workspaceState} onState={setWorkspaceState} onStatus={setWebMCPAvailable} />
       {/* Toast notifications */}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
@@ -143,6 +202,8 @@ export default function MetaEditPage() {
         isInspecting={isInspecting}
         selectedTarget={selectedTarget}
         onSelectTarget={handleSelectTarget}
+        onSelectRegion={handleSelectRegion}
+        selectionColor={workspaceState?.currentCollaborator?.color}
       />
 
       {/* MetaEdit collaborator cursors in editor mode */}
@@ -199,7 +260,7 @@ export default function MetaEditPage() {
             </Button>
           ) : (
             <div className="flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1 text-sm font-medium text-primary border border-primary/20">
-              <span className="size-2 rounded-full bg-primary animate-pulse" />
+              <span className="size-2 rounded-full bg-primary" />
               <span>MetaEdit Active</span>
             </div>
           )}
@@ -425,7 +486,7 @@ export default function MetaEditPage() {
                     Make headline shorter & bold
                   </div>
                   <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[10px] text-[#8f8f8f] font-mono">Maya Chen</span>
+                    <span className="text-[10px] text-[#8f8f8f] font-mono">You</span>
                     <div className="flex items-center gap-1">
                       <span className="text-[10px] text-[#6e6e6e] px-2 py-0.5 rounded-full bg-[#f6f6f6]">Cancel</span>
                       <span className="text-[10px] text-white px-2.5 py-0.5 rounded-full bg-[#191919] font-medium">Save</span>
@@ -454,8 +515,7 @@ export default function MetaEditPage() {
               <div className="w-full h-40 flex items-center justify-center shrink-0">
                 <div className="w-full rounded-xl bg-white border border-[#191919]/10 p-3 shadow-sm flex flex-col gap-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-mono text-[#059669] font-medium">revision v18</span>
-                    <span className="rounded-full bg-[#059669]/10 text-[#059669] text-[10px] font-medium px-2 py-0.5">v18</span>
+                    <span className="font-mono text-[#059669] font-medium">Proposed change</span>
                   </div>
                   <div className="rounded-lg bg-[#f6f6f6] p-2 font-mono text-[11px] space-y-0.5">
                     <div className="text-rose-600 truncate">- text-4xl leading-tight</div>
@@ -711,6 +771,17 @@ export default function MetaEditPage() {
         </footer>
       </main>
 
+      {isMetaEditMode && !inspectTipDismissed && (
+        <div
+          data-metaedit-chrome="true"
+          className="pointer-events-auto fixed left-1/2 top-20 z-[70] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-[#191919]/10 bg-white px-3.5 py-2 text-xs text-[#505050] shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
+          role="status"
+        >
+          <span>Click an element to annotate it, or drag over a section.</span>
+          <button type="button" onClick={() => setInspectTipDismissed(true)} className="shrink-0 rounded-full px-1.5 py-0.5 font-medium text-[#6e6e6e] transition hover:bg-[#f3f3f3] hover:text-[#191919]" aria-label="Dismiss editing tip">Got it</button>
+        </div>
+      )}
+
       {/* Access Token Gate Modal */}
       <AccessModal
         open={accessModalOpen}
@@ -721,29 +792,42 @@ export default function MetaEditPage() {
       {/* Floating Editor Pill in MetaEdit Mode — Contains the ONLY exit button */}
       {isMetaEditMode && (
         <EditorPill
-          isInspecting={isInspecting}
-          onToggleInspect={() => setIsInspecting(!isInspecting)}
           selectedTarget={selectedTarget}
-          onClearTarget={() => setSelectedTarget(null)}
+          onClearTarget={handleClearTarget}
           onRequestChange={handleRequestChange}
           onToggleActivity={() => setActivityOpen(!activityOpen)}
-          collaboratorCount={workspaceState?.collaborators.length ?? 1}
-          activityCount={(workspaceState?.annotations.filter((item) => item.status === "open").length ?? 0) + (workspaceState?.revisions.filter((item) => item.status === "proposed").length ?? 0)}
+          activityButtonRef={activityButtonRef}
+          activityOpen={activityOpen}
+          collaborators={workspaceState?.collaborators ?? []}
+          currentCollaboratorId={workspaceState?.currentCollaborator?.id}
           hasSoftLock={null}
           busy={busyRequest}
-          onExitMetaEdit={handleExitMetaEdit}
-          webMCPAvailable={webMCPAvailable}
+          onExitMetaEdit={requestExitMetaEdit}
         />
       )}
+
+      <Modal open={exitConfirmOpen} onClose={() => setExitConfirmOpen(false)} className="max-w-sm rounded-2xl bg-white p-6">
+        <div className="space-y-5">
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium text-[#191919]">Exit MetaEdit?</h2>
+            <p className="text-sm leading-relaxed text-[#6e6e6e]">Your annotations and previews stay saved, but you will return to visitor mode.</p>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setExitConfirmOpen(false)} className="h-9 rounded-full px-4 text-sm font-medium text-[#6e6e6e] transition hover:bg-[#f3f3f3] hover:text-[#191919]">Stay</button>
+            <button type="button" onClick={handleExitMetaEdit} className="h-9 rounded-full bg-[#191919] px-4 text-sm font-medium text-white transition hover:bg-[#303030]">Exit MetaEdit</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Activity & History Panel */}
       <ActivityPanel
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
+        anchorRef={activityButtonRef}
         state={workspaceState}
-        preview={previewChanges}
-        onTogglePreview={() => setPreviewChanges((value) => !value)}
-        onFocus={(selector) => { focusMetaEditTarget(selector); setActivityOpen(false); }}
+        comparison={comparison}
+        onCompare={handleCompareRevision}
+        onFocus={(annotation: Annotation) => { const color = annotation.authorColor ?? workspaceState?.currentCollaborator?.color; if (annotation.selectionType === "region" && annotation.region) focusMetaEditRegion(annotation.region, color); else focusMetaEditTarget(annotation.selector, color); setActivityOpen(false); }}
         onReview={handleReviewRevision}
         onPublish={handlePublishRevision}
       />

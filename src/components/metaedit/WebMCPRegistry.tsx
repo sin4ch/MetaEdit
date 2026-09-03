@@ -32,38 +32,46 @@ export function WebMCPRegistry({ enabled, state, onState, onStatus }: { enabled:
       if (response.state) onStateRef.current(response.state);
       return result(response);
     };
+    const markSeen = async (annotationIds: string[], options: WebMCPExecuteOptions) => {
+      const ids = Array.from(new Set(annotationIds.filter(Boolean))).slice(0, 100);
+      if (ids.length === 0) return currentState();
+      const response = await metaEditRequest<{ state?: WorkspaceState }>("mark_annotations_seen", { annotationIds: ids }, { signal: options.signal });
+      if (response.state) onStateRef.current(response.state);
+      return response.state ?? currentState();
+    };
     const tools: WebMCPTool[] = [
       {
         name: "metaedit_get_workspace",
-        description: "Read the current MetaEdit workspace, collaborators, annotations, revision proposals, approvals, and published version before deciding what to change.",
+        description: "Read the current MetaEdit workspace, collaborators, annotations, revision proposals, approvals, and published version before deciding what to change. Reading annotations marks them as seen by the agent.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: () => result(currentState()),
+        annotations: { untrustedContentHint: true },
+        execute: async (_input, options) => result(await markSeen(currentState().annotations.filter((item) => item.agentState === "unseen").map((item) => item.id), options)),
       },
       {
         name: "metaedit_list_annotations",
-        description: "List open UI annotations with stable selectors, original text and computed style snapshots, author attribution, and comments.",
+        description: "List open UI annotations with stable selectors, original text and computed style snapshots, author attribution, comments, and any freeform regions with the elements they intersect. Listing annotations marks them as seen by the agent.",
         inputSchema: { type: "object", properties: { status: { type: "string", enum: ["open", "resolved", "all"] } }, additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: ({ status = "open" }) => {
+        annotations: { untrustedContentHint: true },
+        execute: async ({ status = "open" }, options) => {
           const current = currentState();
-          return result(current.annotations.filter((item) => status === "all" || item.status === status));
+          const next = await markSeen(current.annotations.filter((item) => status === "all" || item.status === status).map((item) => item.id), options);
+          return result(next.annotations.filter((item) => status === "all" || item.status === status));
         },
       },
       {
         name: "metaedit_inspect_annotation",
-        description: "Inspect one annotation and its related revisions before proposing a safe UI patch.",
+        description: "Inspect one annotation and its related revisions before proposing a safe UI patch. This marks the annotation as seen by the agent. Region annotations include the raw rectangle and the visible elements inside it.",
         inputSchema: { type: "object", properties: { annotationId: { type: "string" } }, required: ["annotationId"], additionalProperties: false },
-        annotations: { readOnlyHint: true, untrustedContentHint: true },
-        execute: ({ annotationId }) => {
-          const current = currentState();
+        annotations: { untrustedContentHint: true },
+        execute: async ({ annotationId }, options) => {
+          const current = await markSeen([String(annotationId)], options);
           return result({ annotation: current.annotations.find((item) => item.id === annotationId), revisions: current.revisions.filter((item) => item.annotationId === annotationId) });
         },
       },
       {
         name: "metaedit_create_annotation",
-        description: "Create an attributed annotation for a UI target. Use target metadata collected from the page inspector, including selector, original text, and style snapshot.",
-        inputSchema: { type: "object", properties: { target: { type: "object", description: "TargetMetadata from the MetaEdit inspector" }, comment: { type: "string", minLength: 1 } }, required: ["target", "comment"], additionalProperties: false },
+        description: "Create an attributed annotation for an element or a freeform region. For a region, preserve the raw rectangle and highlightedElements list so the agent can understand every intersected element without snapping the selection.",
+        inputSchema: { type: "object", properties: { target: { type: "object", description: "TargetMetadata from the MetaEdit inspector. A region target has selectionType=region, a document-space region rectangle, and highlightedElements.", properties: { component: { type: "string" }, source: { type: "string" }, instanceId: { type: "string" }, selector: { type: "string" }, textSnapshot: { type: "string" }, styleSnapshot: { type: "object" }, selectionType: { type: "string", enum: ["element", "region"] }, region: { type: "object", properties: { top: { type: "number" }, left: { type: "number" }, width: { type: "number" }, height: { type: "number" } }, required: ["top", "left", "width", "height"], additionalProperties: false }, highlightedElements: { type: "array", items: { type: "object" } } }, required: ["component", "source", "instanceId", "selector", "textSnapshot", "styleSnapshot"], additionalProperties: false }, comment: { type: "string", minLength: 1 } }, required: ["target", "comment"], additionalProperties: false },
         annotations: { untrustedContentHint: true },
         execute: (input, options) => call("create_annotation", input, options),
       },

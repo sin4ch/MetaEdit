@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "metaedit",
+  "main": "vinext/server/app-router-entry",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "metaedit-production",
+      "database_id": "1c97ff27-c3d4-4d70-af48-5fc3fb5182cd"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

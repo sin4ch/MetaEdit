@@ -40,7 +40,6 @@ export function HeaderMorph({
         stickyTop,
         className
       )}
-      data-metaedit-chrome="true"
     >
       <div
         className={cn(
@@ -52,7 +51,7 @@ export function HeaderMorph({
           // The morphing glass pill on scroll
           "group-data-[scrolled=true]:h-12 group-data-[scrolled=true]:max-w-3xl",
           "group-data-[scrolled=true]:border-[#8f8f8f]/30 group-data-[scrolled=true]:bg-white/90",
-          "group-data-[scrolled=true]:p-2 group-data-[scrolled=true]:px-3",
+          "group-data-[scrolled=true]:p-2",
           "group-data-[scrolled=true]:backdrop-blur-xl group-data-[scrolled=true]:backdrop-saturate-125",
           "group-data-[scrolled=true]:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.08)]"
         )}

@@ -65,7 +65,7 @@ export async function createCollaborator(request: Request, displayName: string) 
   const now = Date.now();
   const expiresAt = now + SESSION_MS;
   if (existing) {
-    await d1.prepare(`UPDATE collaborators SET display_name = ?, email = ?, session_expires_at = ?, last_seen_at = ? WHERE id = ?`).bind(platformName ?? displayName, email, expiresAt, now, existing.id).run();
+    await d1.prepare(`UPDATE collaborators SET display_name = ?, email = ?, session_expires_at = ?, last_seen_at = ?, cursor_x = NULL, cursor_y = NULL WHERE id = ?`).bind(platformName ?? displayName, email, expiresAt, now, existing.id).run();
     return { collaborator: { ...mapCollaborator(existing), displayName: platformName ?? displayName, email, lastSeenAt: new Date(now).toISOString() }, expiresAt };
   }
   const count = await d1.prepare(`SELECT COUNT(*) AS count FROM collaborators WHERE workspace_id = ?`).bind(WORKSPACE_ID).first<{ count: number }>();

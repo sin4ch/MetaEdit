@@ -5,90 +5,222 @@ import { AnimatePresence, motion } from "motion/react";
 import { PANEL } from "@/lib/springs";
 import { cn } from "@/lib/cn";
 import type { Annotation, Revision, WorkspaceState } from "@/types/metaedit";
-import { Check, Clock3, Eye, LocateFixed, MessageSquareText, Rocket, X } from "lucide-react";
+import { Check, Eye, LocateFixed, MessageSquareText, Rocket, X } from "lucide-react";
 
 interface ActivityPanelProps {
   open: boolean;
   onClose: () => void;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
   state: WorkspaceState | null;
-  preview: boolean;
-  onTogglePreview: () => void;
-  onFocus: (selector: string) => void;
+  comparison: { revisionId: string; mode: "before" | "after" } | null;
+  onFocus: (annotation: Annotation) => void;
+  onCompare: (revisionId: string | null, mode: "before" | "after" | null) => void;
   onReview: (revisionId: string, decision: "approved" | "rejected") => void;
   onPublish: (revisionId: string) => void;
 }
 
-export function ActivityPanel({ open, onClose, state, preview, onTogglePreview, onFocus, onReview, onPublish }: ActivityPanelProps) {
-  const [filter, setFilter] = React.useState<"all" | "annotations" | "revisions">("all");
-  const [compareId, setCompareId] = React.useState<string | null>(null);
+type ActivityEntry = {
+  id: string;
+  createdAt: string;
+  annotation?: Annotation;
+  revision?: Revision;
+};
+
+type CompareMode = "before" | "after";
+
+export function ActivityPanel({ open, onClose, anchorRef, state, comparison, onFocus, onCompare, onReview, onPublish }: ActivityPanelProps) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const [popoverStyle, setPopoverStyle] = React.useState<React.CSSProperties>({ left: "50%", bottom: 24, transform: "translateX(-50%)" });
+  const compareId = comparison?.revisionId ?? null;
+  const compareMode = comparison?.mode ?? null;
   const annotations = React.useMemo(() => state?.annotations ?? [], [state?.annotations]);
   const revisions = React.useMemo(() => state?.revisions ?? [], [state?.revisions]);
+  const collaboratorById = React.useMemo(() => new Map((state?.collaborators ?? []).map((item) => [item.id, item])), [state?.collaborators]);
   const annotationById = React.useMemo(() => new Map(annotations.map((item) => [item.id, item])), [annotations]);
-  const entries = React.useMemo(() => [
-    ...(filter !== "revisions" ? annotations.map((item) => ({ kind: "annotation" as const, createdAt: item.createdAt, item })) : []),
-    ...(filter !== "annotations" ? revisions.map((item) => ({ kind: "revision" as const, createdAt: item.createdAt, item })) : []),
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [annotations, revisions, filter]);
+  const entries = React.useMemo<ActivityEntry[]>(() => {
+    const latestRevisionByAnnotation = new Map<string, Revision>();
+    for (const revision of revisions.slice().sort((a, b) => a.version - b.version)) {
+      if (revision.annotationId) latestRevisionByAnnotation.set(revision.annotationId, revision);
+    }
+
+    const merged = annotations.map((annotation) => {
+      const revision = latestRevisionByAnnotation.get(annotation.id);
+      return {
+        id: revision?.id ?? annotation.id,
+        createdAt: revision?.createdAt ?? annotation.createdAt,
+        annotation,
+        revision,
+      };
+    });
+
+    const orphanRevisions = revisions
+      .filter((revision) => !revision.annotationId || !annotationById.has(revision.annotationId))
+      .map((revision) => ({ id: revision.id, createdAt: revision.createdAt, revision }));
+
+    return [...merged, ...orphanRevisions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [annotations, revisions, annotationById]);
+
+  const toggleComparison = (revisionId: string) => {
+    if (compareId !== revisionId) {
+      onCompare(revisionId, "before");
+      return;
+    }
+
+    if (compareMode === "before") {
+      onCompare(revisionId, "after");
+      return;
+    }
+
+    onCompare(null, null);
+  };
+
+  const handleClose = React.useCallback(() => {
+    if (comparison) onCompare(null, null);
+    onClose();
+  }, [comparison, onCompare, onClose]);
+
+  const handleFocus = React.useCallback((annotation: Annotation) => {
+    if (comparison) onCompare(null, null);
+    onFocus(annotation);
+  }, [comparison, onCompare, onFocus]);
+
+  const updatePopoverPosition = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    const anchor = anchorRef.current;
+    if (!anchor) {
+      setPopoverStyle({ left: "50%", bottom: 24, transform: "translateX(-50%)" });
+      return;
+    }
+
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(448, Math.max(240, window.innerWidth - 24));
+    const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
+    setPopoverStyle({ left, bottom: Math.max(12, window.innerHeight - rect.top + 12), transform: "none" });
+  }, [anchorRef]);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    updatePopoverPosition();
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, { passive: true });
+    return () => {
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition);
+    };
+  }, [open, updatePopoverPosition]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") handleClose();
+    };
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!panelRef.current?.contains(target) && !anchorRef.current?.contains(target)) handleClose();
+    };
+    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("pointerdown", handleOutsidePointer, true);
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("pointerdown", handleOutsidePointer, true);
+    };
+  }, [open, anchorRef, handleClose]);
 
   return (
     <AnimatePresence>
       {open && (
-        <motion.aside initial={{ x: "100%", opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: "100%", opacity: 0 }} transition={PANEL} className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-[#191919]/10 bg-white shadow-2xl" data-metaedit-chrome="true" aria-label="MetaEdit activity">
-          <header className="border-b border-[#191919]/10 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-full bg-[#305dde]/10 text-[#305dde]"><Clock3 className="size-4" /></span>
-                <div><h2 className="text-sm font-semibold text-[#191919]">Workspace activity</h2><p className="mt-0.5 text-[11px] text-[#6e6e6e]">Annotations, preview revisions, approvals, and publishing</p></div>
-              </div>
-              <button onClick={onClose} className="flex size-8 items-center justify-center rounded-full text-[#6e6e6e] hover:bg-[#f3f3f3]" aria-label="Close activity"><X className="size-4" /></button>
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <div className="flex rounded-full bg-[#f3f3f3] p-1">
-                {(["all", "annotations", "revisions"] as const).map((value) => <button key={value} onClick={() => setFilter(value)} className={cn("rounded-full px-3 py-1 text-[11px] font-medium capitalize", filter === value ? "bg-[#191919] text-white" : "text-[#6e6e6e]")}>{value}</button>)}
-              </div>
-              <button onClick={onTogglePreview} className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium", preview ? "bg-[#305dde] text-white" : "bg-[#f3f3f3] text-[#505050]")}><Eye className="size-3.5" />{preview ? "Preview on" : "Published"}</button>
-            </div>
-          </header>
+        <motion.div ref={panelRef} initial={{ y: 8, scale: 0.98, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 8, scale: 0.98, opacity: 0 }} transition={PANEL} style={popoverStyle} className="pointer-events-auto fixed z-[70] flex w-[calc(100vw-1.5rem)] max-h-[min(60vh,32rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-[#191919]/10 bg-white shadow-[0_16px_48px_rgba(0,0,0,0.16)]" data-metaedit-chrome="true" role="dialog" aria-label="MetaEdit activity">
+          <button type="button" onClick={handleClose} className="absolute right-2 top-2 z-10 flex size-7 shrink-0 items-center justify-center rounded-full text-[#6e6e6e] transition hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40" aria-label="Close activity"><X className="size-4" /></button>
 
-          <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {entries.length === 0 && <div className="grid min-h-72 place-items-center text-center"><div><MessageSquareText className="mx-auto size-8 text-[#b5b5b5]" /><p className="mt-3 text-sm font-medium">No activity yet</p><p className="mx-auto mt-1 max-w-64 text-xs leading-relaxed text-[#6e6e6e]">Inspect an element and leave a comment. Your browser agent can then propose a revision.</p></div></div>}
-            {entries.map((entry) => entry.kind === "annotation" ? (
-              <AnnotationCard key={entry.item.id} annotation={entry.item} onFocus={onFocus} />
-            ) : (
-              <RevisionCard key={entry.item.id} revision={entry.item} annotation={entry.item.annotationId ? annotationById.get(entry.item.annotationId) : undefined} comparing={compareId === entry.item.id} onCompare={() => setCompareId(compareId === entry.item.id ? null : entry.item.id)} onFocus={onFocus} onReview={onReview} onPublish={onPublish} isOwner={state?.currentCollaborator?.role === "owner"} currentCollaboratorId={state?.currentCollaborator?.id} />
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pt-10">
+            {entries.length === 0 && <div className="grid min-h-48 place-items-center text-center"><div><MessageSquareText className="mx-auto size-6 text-[#b5b5b5]" /><p className="mt-2 text-sm font-medium">No activity yet</p><p className="mx-auto mt-1 max-w-56 text-xs leading-relaxed text-[#6e6e6e]">Select an element to leave the first annotation.</p></div></div>}
+            {entries.map((entry) => (
+              <ChangeCard
+                key={entry.id}
+                annotation={entry.annotation}
+                revision={entry.revision}
+                compareMode={entry.revision && compareId === entry.revision.id ? compareMode : null}
+                onCompare={entry.revision ? () => toggleComparison(entry.revision!.id) : undefined}
+                onFocus={handleFocus}
+                onReview={onReview}
+                onPublish={onPublish}
+                isOwner={state?.currentCollaborator?.role === "owner"}
+                currentCollaboratorId={state?.currentCollaborator?.id}
+                authorColor={entry.revision?.authorColor ?? entry.annotation?.authorColor ?? collaboratorById.get(entry.revision?.authorId ?? entry.annotation?.authorId ?? "")?.color}
+              />
             ))}
           </div>
-        </motion.aside>
+        </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
-function AnnotationCard({ annotation, onFocus }: { annotation: Annotation; onFocus: (selector: string) => void }) {
-  return <button onClick={() => onFocus(annotation.selector)} className="w-full rounded-lg border border-[#191919]/10 bg-[#f7f7f7] p-4 text-left shadow-sm transition hover:border-[#305dde]/30">
-    <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 text-xs font-semibold"><span className="size-2 rounded-full bg-[#305dde]" />{annotation.authorName}</span><span className="rounded-full bg-white px-2 py-1 text-[10px] text-[#6e6e6e]">{annotation.status}</span></div>
-    <p className="mt-3 text-sm leading-relaxed text-[#191919]">“{annotation.comment}”</p>
-    <div className="mt-3 flex items-center justify-between border-t border-[#191919]/8 pt-2 text-[10px] text-[#6e6e6e]"><span className="flex min-w-0 items-center gap-1.5 font-mono"><LocateFixed className="size-3 shrink-0" /><span className="truncate">{annotation.component} · #{annotation.targetId}</span></span><time>{formatTime(annotation.createdAt)}</time></div>
-  </button>;
-}
+function ChangeCard({ annotation, revision, compareMode, onCompare, onFocus, onReview, onPublish, isOwner, currentCollaboratorId, authorColor }: { annotation?: Annotation; revision?: Revision; compareMode: CompareMode | null; onCompare?: () => void; onFocus: (annotation: Annotation) => void; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; isOwner: boolean; currentCollaboratorId?: string; authorColor?: string }) {
+  const currentDecision = revision?.approvals.find((item) => item.collaboratorId === currentCollaboratorId)?.decision;
+  const operations = compareMode === "before" ? revision?.before : revision?.patch;
+  const authorName = revision?.authorName ?? annotation?.authorName ?? "Collaborator";
+  const reaction = getReaction(annotation, revision);
+  const targetLabel = annotation ? annotation.selectionType === "region" ? `Freeform area · ${annotation.highlightedElements?.length ?? 0} elements` : `${annotation.component} · #${annotation.targetId}` : null;
+  const createdAt = revision?.createdAt ?? annotation?.createdAt;
 
-function RevisionCard({ revision, annotation, comparing, onCompare, onFocus, onReview, onPublish, isOwner, currentCollaboratorId }: { revision: Revision; annotation?: Annotation; comparing: boolean; onCompare: () => void; onFocus: (selector: string) => void; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; isOwner: boolean; currentCollaboratorId?: string }) {
-  const currentDecision = revision.approvals.find((item) => item.collaboratorId === currentCollaboratorId)?.decision;
-  return <article className="rounded-lg border border-[#191919]/10 bg-white p-4 shadow-sm">
-    <button onClick={() => annotation && onFocus(annotation.selector)} className="w-full text-left">
-      <div className="flex items-center justify-between gap-2"><span className="text-xs font-semibold">{revision.authorName} <span className="font-mono font-normal text-[#8f8f8f]">v{revision.version}</span></span><Status status={revision.status} /></div>
-      <p className="mt-3 text-sm leading-relaxed">{revision.instruction}</p>
-      <p className="mt-2 truncate text-[10px] font-mono text-[#6e6e6e]">{annotation ? `${annotation.component} · #${annotation.targetId}` : "Workspace revision"}</p>
-    </button>
-    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[#191919]/8 pt-3">
-      <button onClick={onCompare} className="flex h-8 items-center gap-1.5 rounded-full bg-[#f3f3f3] px-3 text-[11px] font-medium"><Eye className="size-3.5" />{comparing ? "Hide" : "Before / after"}</button>
-      {revision.status !== "published" && <><button onClick={() => onReview(revision.id, "approved")} className={cn("flex h-8 items-center gap-1 rounded-full px-3 text-[11px] font-medium", currentDecision === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-[#f3f3f3]")}><Check className="size-3.5" />Approve</button><button onClick={() => onReview(revision.id, "rejected")} className={cn("flex size-8 items-center justify-center rounded-full", currentDecision === "rejected" ? "bg-rose-100 text-rose-700" : "bg-[#f3f3f3]")} aria-label="Reject revision"><X className="size-3.5" /></button></>}
-      {isOwner && revision.status === "approved" && <button onClick={() => onPublish(revision.id)} className="ml-auto flex h-8 items-center gap-1.5 rounded-full bg-[#191919] px-3 text-[11px] font-medium text-white"><Rocket className="size-3.5" />Publish</button>}
+  return <article className="space-y-2 pb-1">
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ backgroundColor: authorColor ?? "#305dde" }}>{authorName.slice(0, 1).toUpperCase()}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="truncate text-sm font-semibold text-[#191919]">{authorName}</p>
+        {annotation && targetLabel && <button type="button" onClick={() => onFocus(annotation)} className="flex min-w-0 max-w-full items-center gap-1 text-left text-[10px] text-[#6e6e6e] transition hover:text-[#191919] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40" aria-label={annotation.selectionType === "region" ? "Focus freeform area" : `Focus ${annotation.component} ${annotation.targetId}`}>
+          <LocateFixed className="size-3 shrink-0" />
+          <span className="truncate font-mono">{targetLabel}</span>
+        </button>}
+      </div>
     </div>
-    {comparing && <div className="mt-3 grid gap-2 rounded-md bg-[#f7f7f7] p-2 text-[10px] sm:grid-cols-2"><PatchList title="Before" operations={revision.before} /><PatchList title="After" operations={revision.patch} /></div>}
-    {revision.approvals.length > 0 && <p className="mt-2 text-[10px] text-[#6e6e6e]">Reviewed by {revision.approvals.map((item) => `${item.collaboratorName} (${item.decision})`).join(", ")}</p>}
+
+    {(annotation || revision) && <div className="flex flex-wrap items-end gap-2">
+      {annotation ? (
+        <div className="min-w-0 max-w-[min(100%,20rem)] rounded-2xl rounded-tl-sm bg-[#f3f3f3] px-2.5 py-2">
+          <p className="text-sm leading-5 text-[#191919]">{annotation.comment}</p>
+          <div className="mt-1.5 flex min-h-4 items-center justify-end gap-2">
+            {reaction && <span className="inline-flex shrink-0 items-center rounded-full border border-[#191919]/10 bg-white px-1.5 py-0.5 text-xs leading-none shadow-sm" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</span>}
+            {createdAt && <time className="text-right text-[10px] font-sans text-[#8f8f8f]">{formatTime(createdAt)}</time>}
+          </div>
+        </div>
+      ) : (
+        <div className="ml-auto max-w-[min(100%,20rem)] rounded-2xl rounded-tr-sm bg-[#305dde]/10 px-2.5 py-2">
+          <p className="text-sm leading-5 text-[#191919]">{revision?.instruction}</p>
+          <div className="mt-1.5 flex min-h-4 items-center justify-end gap-2">
+            {reaction && <span className="inline-flex shrink-0 items-center rounded-full border border-[#191919]/10 bg-white px-1.5 py-0.5 text-xs leading-none shadow-sm" title={reaction.label} aria-label={reaction.label}>{reaction.emoji}</span>}
+            {createdAt && <time className="text-right text-[10px] font-sans text-[#8f8f8f]">{formatTime(createdAt)}</time>}
+          </div>
+        </div>
+      )}
+      {revision && <RevisionActions revision={revision} compareMode={compareMode} onCompare={onCompare} currentDecision={currentDecision} onReview={onReview} onPublish={onPublish} isOwner={isOwner} />}
+    </div>}
+
+    {compareMode && operations && <div className="ml-4 rounded-2xl bg-[#f6f6f6] px-3 py-2"><p className="text-[10px] font-medium text-[#505050]">Showing {compareMode}</p><PatchSummary operations={operations} /></div>}
   </article>;
 }
 
-function PatchList({ title, operations }: { title: string; operations: Revision["patch"] }) { return <div className="min-w-0 rounded bg-white p-2"><p className="mb-1 font-semibold text-[#505050]">{title}</p>{operations.map((operation, index) => <pre key={`${operation.selector}-${index}`} className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[#6e6e6e]">{operation.op === "replace_text" ? operation.value || "(empty)" : operation.op === "set_style" ? `${operation.property}: ${operation.value || "(default)"}` : operation.visible ? "visible" : "hidden"}</pre>)}</div>; }
-function Status({ status }: { status: Revision["status"] }) { const colors = status === "published" ? "bg-emerald-100 text-emerald-800" : status === "approved" ? "bg-blue-100 text-blue-800" : status === "rejected" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"; return <span className={cn("rounded-full px-2 py-1 text-[10px] font-medium", colors)}>{status}</span>; }
+function RevisionActions({ revision, compareMode, onCompare, currentDecision, onReview, onPublish, isOwner }: { revision: Revision; compareMode: CompareMode | null; onCompare?: () => void; currentDecision?: "approved" | "rejected"; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; isOwner: boolean }) {
+  const nextComparison = compareMode === "before" ? "after" : compareMode === "after" ? "preview" : "before";
+  return <div className="flex shrink-0 items-center gap-1">
+    {onCompare && <button type="button" onClick={onCompare} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", compareMode ? "bg-[#305dde] text-white" : "bg-[#f3f3f3] text-[#191919]")} aria-label={`Show ${nextComparison} for this revision`} title={`Show ${nextComparison}`}><Eye className="size-3" /></button>}
+    {revision.status !== "published" && <>
+      <button type="button" onClick={() => onReview(revision.id, "approved")} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-[#f3f3f3] text-[#191919]")} aria-label="Approve revision" title="Approve revision"><Check className="size-3" /></button>
+      <button type="button" onClick={() => onReview(revision.id, "rejected")} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "rejected" ? "bg-rose-100 text-rose-700" : "bg-[#f3f3f3] text-[#505050]")} aria-label="Reject revision" title="Reject revision"><X className="size-3" /></button>
+    </>}
+    {isOwner && revision.status === "approved" && <button type="button" onClick={() => onPublish(revision.id)} className="flex size-7 items-center justify-center rounded-full bg-[#191919] text-white transition hover:bg-[#303030] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40" aria-label="Publish revision" title="Publish revision"><Rocket className="size-3" /></button>}
+  </div>;
+}
+
+function PatchSummary({ operations }: { operations: Revision["patch"] }) { return <p className="mt-1.5 text-[11px] leading-4 text-[#6e6e6e]">{operations.length === 0 ? "No UI updates" : operations.slice(0, 2).map(describeOperation).join(" · ")}{operations.length > 2 ? ` · +${operations.length - 2} more` : ""}</p>; }
+function describeOperation(operation: Revision["patch"][number]) { return operation.op === "replace_text" ? "Text" : operation.op === "set_style" ? "Style" : "Visibility"; }
+function getReaction(annotation?: Annotation, revision?: Revision) {
+  if (revision?.status === "rejected") return null;
+  if (revision?.status === "published" || revision?.status === "approved" || annotation?.agentState === "done" || annotation?.status === "resolved") return { emoji: "✅", label: "Changes complete" };
+  if (revision?.status === "proposed" || annotation?.agentState === "in_progress") return { emoji: "⏳", label: "Changes in progress" };
+  if (annotation?.agentState === "seen") return { emoji: "👀", label: "Seen by agent" };
+  return null;
+}
 function formatTime(value: string) { return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }

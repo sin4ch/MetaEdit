@@ -49,7 +49,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`, click **Enter MetaEdit**, enter any display name, click **Use local demo token**, and enter the workspace. The local demo token is `WEBMCP`.
+Open the deployed Worker URL, click **Enter MetaEdit**, enter any display name, click **Use demo token**, and enter the workspace. The demo token is `WEBMCP`.
 
 For a WebMCP-capable browser agent:
 
@@ -112,10 +112,10 @@ Suggested sequence:
 ## Known Limitations
 
 - The demo uses one default workspace rather than organization-level workspaces.
-- The local fallback token is deliberately simple and must be replaced with hosted secrets in production.
+- The demo token is deliberately simple for hackathon testing; production installations should use a workspace-specific token.
 - Patches are intentionally limited to text, an allowlisted CSS property, or visibility. The prototype does not edit arbitrary source files.
 - WebMCP tool invocation must be verified in a browser build that exposes the WebMCP API to the agent.
-- A real deployment needs a provisioned D1 database ID, migration, session-token hash, and cookie secret.
+- The Cloudflare deployment uses the provisioned `metaedit-production` D1 database and hosted session-token and cookie secrets.
 
 ## TODO Official Form Fields
 
@@ -126,7 +126,7 @@ Fill these in on Devpost after choosing the final live URL and testing client:
 - App status: TODO
 - Existing-app update explanation, if applicable: TODO
 - Live URL: TODO
-- Testing instructions and credentials: `Alex Rivera` / `WEBMCP` for the local demo
+- Testing instructions and credentials: any display name / `WEBMCP` for the deployed demo
 - Public code repository: https://github.com/sin4ch/MetaEdit
 - Agents or clients tested with WebMCP tools: TODO, verify in WebMCP-enabled Chrome
 - AI tools leveraged: Codex and the browser agent used for the WebMCP demo

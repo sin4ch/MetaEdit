@@ -5,14 +5,14 @@ import {
   ArrowLeftRightIcon,
   FilterIcon,
   Activity01Icon,
+  Clock01Icon,
   Target02Icon,
   Share05Icon,
   Link02Icon,
   ViewIcon,
-  Clock01Icon,
   Delete02Icon,
   Logout03Icon,
-  CursorPointer02Icon,
+  UserGroupIcon,
 } from "hugeicons-react";
 
 const BROWSER_CANVAS_WIDTH = 1104;
@@ -347,85 +347,21 @@ export function ComparisonSlider() {
                 </div>
               </div>
 
-              {/* ========================================================================= */}
-              {/* COLLABORATOR POINTERS */}
-              {/* ========================================================================= */}
-
-              {/* Maya Chen follows the visible right edge and reaches "here" at the narrow layout */}
-              <div
-                style={{
-                  left: "clamp(132px, calc(88.784cqw - 186.734px), 72%)",
-                  top: "clamp(8px, calc(17.944cqw - 56.418px), 22%)",
-                }}
-                className="absolute flex items-start gap-1.5 z-40 pointer-events-none"
-              >
-                <svg
-                  className="size-5 drop-shadow-md -translate-x-0.5 -translate-y-0.5"
-                  viewBox="0 0 24 24"
-                  fill="#8b5cf6"
-                  stroke="white"
-                  strokeWidth="1.5"
-                >
-                  <path d="M5.653 4.295A1 1 0 004 5.12v13.76a1 1 0 001.653.825l3.963-3.303a1 1 0 01.64-.236h6.744a1 1 0 00.707-1.707L5.653 4.295z" />
-                </svg>
-                <div className="rounded-full bg-[#8b5cf6] px-3 py-1 text-xs font-medium text-white shadow-sm whitespace-nowrap">
-                  Maya Chen
-                </div>
-              </div>
-
-              {/* Alex Rivera follows the visible right edge and reaches the existing mobile position */}
-              <div
-                style={{
-                  left: "clamp(160px, calc(70.234cqw - 92.138px), 62%)",
-                  top: "clamp(68%, calc(544.734px - 9.675cqw), 510px)",
-                }}
-                className="absolute flex items-start gap-1.5 z-40 pointer-events-none"
-              >
-                <svg
-                  className="size-5 drop-shadow-md -translate-x-0.5 -translate-y-0.5"
-                  viewBox="0 0 24 24"
-                  fill="#eab308"
-                  stroke="white"
-                  strokeWidth="1.5"
-                >
-                  <path d="M5.653 4.295A1 1 0 004 5.12v13.76a1 1 0 001.653.825l3.963-3.303a1 1 0 01.64-.236h6.744a1 1 0 00.707-1.707L5.653 4.295z" />
-                </svg>
-                <div className="rounded-full bg-[#eab308] px-3 py-1 text-xs font-medium text-[#191919] shadow-sm whitespace-nowrap">
-                  Alex Rivera
-                </div>
-              </div>
-
               {/* Exact Live In-App Toolbar Pill: Centered across all viewports */}
-              <div className="self-center mx-auto flex items-center gap-1 rounded-full border border-[#191919]/10 bg-[#ffffff]/95 backdrop-blur-xl p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] z-30 select-none">
-                {/* Active Inspecting Blue Pill */}
-                <div className="flex h-8 items-center gap-1.5 rounded-full bg-[#305dde] px-3.5 text-xs font-medium text-white shadow-sm ring-2 ring-[#305dde]/30">
-                  <CursorPointer02Icon className="size-3.5 shrink-0" />
-                  <span>Inspecting (active)</span>
+              <div className="self-center mx-auto flex items-center gap-0.5 rounded-full border border-[#191919]/10 bg-[#ffffff]/95 backdrop-blur-xl p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] z-30 select-none">
+                <div className="flex size-8 items-center justify-center rounded-full bg-transparent text-[#6e6e6e]" aria-label="Activity">
+                  <Clock01Icon className="size-4" />
                 </div>
 
-                {/* Activity Pill */}
-                <div className="flex h-8 items-center gap-1.5 rounded-full bg-[#f6f6f6] px-3 text-xs font-medium text-[#191919]">
-                  <Clock01Icon className="size-3.5 text-[#8f8f8f] shrink-0" />
-                  <span>Activity</span>
+                <div className="flex size-8 items-center justify-center rounded-full text-[#6e6e6e]" aria-label="Collaborators">
+                  <span className="relative flex size-4 items-center justify-center">
+                    <UserGroupIcon className="size-4" />
+                    <span className="absolute -right-2 -top-2 flex min-w-4 items-center justify-center rounded-full bg-[#0f9f75] px-1 text-[9px] font-semibold leading-4 text-white">2</span>
+                  </span>
                 </div>
 
-                {/* Divider */}
-                <div className="mx-1 h-4 w-px bg-[#191919]/10" />
-
-                {/* 2 Online Badge */}
-                <div className="flex items-center gap-1.5 px-2 text-xs text-[#8f8f8f] whitespace-nowrap">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span className="tabular-nums font-medium text-[#191919]">2</span>
-                  <span>online</span>
-                </div>
-
-                {/* Divider */}
-                <div className="mx-1 h-4 w-px bg-[#191919]/10" />
-
-                {/* Exit Pill */}
-                <div className="flex h-8 items-center gap-1 rounded-full px-3 text-xs font-medium text-[#8f8f8f]">
-                  <Logout03Icon className="size-3.5 shrink-0" />
-                  <span>Exit</span>
+                <div className="flex size-8 items-center justify-center rounded-full bg-transparent text-[#6e6e6e]" aria-label="Exit MetaEdit">
+                  <Logout03Icon className="size-4" />
                 </div>
               </div>
             </div>

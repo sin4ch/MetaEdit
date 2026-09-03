@@ -1,7 +1,27 @@
 export type UserRole = "visitor" | "editor" | "owner";
 export type AnnotationStatus = "open" | "resolved";
+export type AnnotationAgentState = "unseen" | "seen" | "in_progress" | "done";
 export type RevisionStatus = "proposed" | "approved" | "published" | "rejected";
 export type ApprovalDecision = "approved" | "rejected";
+export type TargetSelectionType = "element" | "region";
+
+export interface MetaEditRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export interface HighlightedElement {
+  selector: string;
+  component: string;
+  instanceId: string;
+  tagName: string;
+  textSnapshot: string;
+  styleSnapshot: Record<string, string>;
+  boundingRect: MetaEditRect;
+  intersectionRatio: number;
+}
 
 export interface Collaborator {
   id: string;
@@ -21,21 +41,29 @@ export interface TargetMetadata {
   selector: string;
   textSnapshot: string;
   styleSnapshot: Record<string, string>;
+  selectionType?: TargetSelectionType;
+  region?: MetaEditRect;
+  highlightedElements?: HighlightedElement[];
   description?: string;
   propsSummary?: Record<string, string | number | boolean>;
-  boundingRect?: { top: number; left: number; width: number; height: number };
+  boundingRect?: MetaEditRect;
 }
 
 export interface Annotation {
   id: string;
   authorId: string;
   authorName: string;
+  authorColor?: string;
   targetId: string;
   selector: string;
   component: string;
   source: string;
   textSnapshot: string;
   styleSnapshot: Record<string, string>;
+  selectionType?: TargetSelectionType;
+  region?: MetaEditRect | null;
+  highlightedElements?: HighlightedElement[];
+  agentState?: AnnotationAgentState;
   comment: string;
   status: AnnotationStatus;
   createdAt: string;
@@ -63,6 +91,7 @@ export interface Revision {
   annotationId?: string | null;
   authorId: string;
   authorName: string;
+  authorColor?: string;
   instruction: string;
   baseVersion: number;
   version: number;

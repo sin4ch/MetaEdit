@@ -36,14 +36,14 @@ To enter the editing workspace:
 
 1. Click **Enter MetaEdit**.
 2. Enter a display name.
-3. Click **Use local demo token**, or enter `WEBMCP`.
+3. Click **Use demo token**, or enter `WEBMCP`.
 4. Click **Enter Workspace**.
 
 The local demo uses a SQLite-compatible D1 binding supplied by the Cloudflare/Vinext dev runtime. The first API request creates the tables and the default `MetaEdit` workspace automatically. Local state is stored by the dev runtime and is not production data.
 
 ## Configuration
 
-The local fallback token is `WEBMCP`. It is intended only for this demo. Production deployments must set both secrets below and should not rely on the fallback values.
+The demo workspace token is `WEBMCP` in both local development and the deployed Worker. The token is checked using its SHA-256 hash, so the plaintext token is never stored in the database or Worker configuration.
 
 | Variable | Description |
 | --- | --- |
@@ -56,7 +56,20 @@ Example hash generation:
 printf 'WEBMCP' | sha256sum
 ```
 
-The app reads the `DB` D1 binding from `cloudflare:workers`. `.openai/hosting.json` identifies the hosting project and binding name used by the local Vite configuration. A Cloudflare deployment needs a real D1 database ID, the schema migration, and both secrets configured in the target environment.
+The app reads the `DB` D1 binding from `cloudflare:workers`. `wrangler.jsonc` points the Worker at the production `metaedit-production` database; the first request bootstraps the tables and default `MetaEdit` workspace. `.openai/hosting.json` is retained for the local Sites sign-in shim. The session cookie is signed with `METAEDIT_COOKIE_SECRET`.
+
+## Deploy to Cloudflare
+
+The repository is configured for a Cloudflare Worker backed by D1:
+
+```bash
+npm install
+npx wrangler secret put METAEDIT_SESSION_TOKEN_HASH
+npx wrangler secret put METAEDIT_COOKIE_SECRET
+npx @vinext/cloudflare@1.0.0-beta.3 deploy
+```
+
+When prompted for `METAEDIT_SESSION_TOKEN_HASH`, enter the SHA-256 digest of `WEBMCP` (generate it with `printf 'WEBMCP' | sha256sum`). Use a long random value for `METAEDIT_COOKIE_SECRET`. The deployed Worker is served from its `*.workers.dev` URL unless a custom route is configured in Cloudflare.
 
 ## How the app is structured
 
@@ -97,7 +110,7 @@ The repository is the source of truth for the demo. The written story for the su
 
 > MetaEdit lets a human point at a live interface and leave an attributed request. A browser agent reads the page's WebMCP tools, inspects the annotation and current checkpoint, and proposes a constrained revision. The result remains a shared preview until collaborators approve it. The owner publishes from the same page, so the agent can help with implementation without taking the final decision away from the people reviewing the UI.
 
-Suggested testing credentials for the submission form are the display name `Alex Rivera` and the local/demo token `WEBMCP`. Do not use the fallback token for a public production deployment.
+Suggested testing credentials for the submission form are the display name `Alex Rivera` and the demo token `WEBMCP`.
 
 The remaining submission work is external to this repository: provide a working live URL, record a public video under three minutes with audio, complete the Devpost form, and verify the public repository from an incognito window. This repository includes the source, setup instructions, WebMCP tool list, and MIT license needed for that handoff.
 

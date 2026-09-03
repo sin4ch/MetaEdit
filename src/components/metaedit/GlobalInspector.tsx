@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { TargetMetadata } from "@/types/metaedit";
+import type { HighlightedElement, MetaEditRect, TargetMetadata } from "@/types/metaedit";
 
 interface GlobalInspectorProps {
   isInspecting: boolean;
   selectedTarget: TargetMetadata | null;
   onSelectTarget: (target: TargetMetadata) => void;
+  onSelectRegion: (target: TargetMetadata) => void;
+  selectionColor?: string;
 }
 
 interface RectBox {
@@ -23,13 +25,33 @@ interface RectBox {
   styleSnapshot: Record<string, string>;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface DrawRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 export function GlobalInspector({
   isInspecting,
   selectedTarget,
   onSelectTarget,
+  onSelectRegion,
+  selectionColor,
 }: GlobalInspectorProps) {
   const [hoverRect, setHoverRect] = React.useState<RectBox | null>(null);
   const [selectedRect, setSelectedRect] = React.useState<RectBox | null>(null);
+  const [drawRect, setDrawRect] = React.useState<DrawRect | null>(null);
+  const [viewportOffset, setViewportOffset] = React.useState({ x: 0, y: 0 });
+  const suppressClickRef = React.useRef(false);
+  const drawStartRef = React.useRef<Point | null>(null);
+  const dragActiveRef = React.useRef(false);
+  const accentColor = selectionColor ?? "#305dde";
 
   // Derive component name / context from ANY element
   const getElementMeta = (el: HTMLElement): RectBox => {
@@ -91,24 +113,16 @@ export function GlobalInspector({
 
   React.useEffect(() => {
     if (!isInspecting) return;
+    suppressClickRef.current = false;
 
-    const isIgnored = (target: HTMLElement | null): boolean => {
-      if (!target) return true;
-      if (
-        target.closest("[data-metaedit-chrome]") ||
-        target.closest("aside") ||
-        target.closest("[role='dialog']")
-      ) {
-        return true;
-      }
-      if (target === document.body || target === document.documentElement) {
-        return true;
-      }
-      return false;
-    };
+    const isIgnored = (target: HTMLElement | null): boolean => isIgnoredTarget(target, false);
 
     const handleMouseMove = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
+      if (drawStartRef.current) {
+        setHoverRect(null);
+        return;
+      }
       if (isIgnored(target)) {
         setHoverRect(null);
         return;
@@ -136,9 +150,16 @@ export function GlobalInspector({
           height: meta.height,
         },
       });
+      drawStartRef.current = null;
+      dragActiveRef.current = false;
+      setDrawRect(null);
     };
 
     const handleClick = (e: MouseEvent) => {
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false;
+        return;
+      }
       const target = e.target as HTMLElement | null;
       if (isIgnored(target)) return;
 
@@ -148,42 +169,101 @@ export function GlobalInspector({
       if (target) handleSelect(target);
     };
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      const target = document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null;
-      if (isIgnored(target)) return;
-
+    const handlePointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 || isIgnoredTarget(e.target as HTMLElement | null, true)) return;
       e.preventDefault();
       e.stopPropagation();
+      const point = { x: e.clientX, y: e.clientY };
+      drawStartRef.current = point;
+      dragActiveRef.current = false;
+      setDrawRect({ top: point.y, left: point.x, width: 0, height: 0 });
+    };
 
-      if (target) handleSelect(target);
+    const handlePointerMove = (e: PointerEvent) => {
+      const start = drawStartRef.current;
+      if (!start) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = normalizeDrawRect(start, { x: e.clientX, y: e.clientY });
+      if (rect.width > 6 || rect.height > 6) dragActiveRef.current = true;
+      setDrawRect(rect);
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      const start = drawStartRef.current;
+      if (!start) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = normalizeDrawRect(start, { x: e.clientX, y: e.clientY });
+      const wasDrag = dragActiveRef.current;
+      drawStartRef.current = null;
+      dragActiveRef.current = false;
+      setDrawRect(null);
+      suppressClickRef.current = true;
+
+      if (wasDrag && rect.width >= 8 && rect.height >= 8) {
+        onSelectRegion(buildRegionTarget(rect, getElementMeta));
+        return;
+      }
+
+      const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      if (!isIgnored(target) && target) handleSelect(target);
+    };
+
+    const handlePointerCancel = () => {
+      drawStartRef.current = null;
+      dragActiveRef.current = false;
+      setDrawRect(null);
     };
 
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
     window.addEventListener("click", handleClick, { capture: true });
-    window.addEventListener("touchend", handleTouchEnd, { capture: true });
+    window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    window.addEventListener("pointermove", handlePointerMove, { capture: true });
+    window.addEventListener("pointerup", handlePointerUp, { capture: true });
+    window.addEventListener("pointercancel", handlePointerCancel, { capture: true });
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("click", handleClick, { capture: true });
-      window.removeEventListener("touchend", handleTouchEnd, { capture: true });
+      window.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      window.removeEventListener("pointermove", handlePointerMove, { capture: true });
+      window.removeEventListener("pointerup", handlePointerUp, { capture: true });
+      window.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
     };
-  }, [isInspecting, onSelectTarget]);
+  }, [isInspecting, onSelectTarget, onSelectRegion]);
+
+  React.useEffect(() => {
+    const previousCursor = document.body.style.cursor;
+    if (isInspecting) document.body.style.cursor = "crosshair";
+    return () => { document.body.style.cursor = previousCursor; };
+  }, [isInspecting]);
+
+  React.useEffect(() => {
+    if (!isInspecting && !selectedTarget) return;
+    const syncViewportOffset = () => setViewportOffset({ x: window.scrollX, y: window.scrollY });
+    syncViewportOffset();
+    window.addEventListener("scroll", syncViewportOffset, { passive: true });
+    window.addEventListener("resize", syncViewportOffset);
+    return () => {
+      window.removeEventListener("scroll", syncViewportOffset);
+      window.removeEventListener("resize", syncViewportOffset);
+    };
+  }, [isInspecting, selectedTarget]);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-40 overflow-visible" data-metaedit-chrome="true">
+    <div className={`pointer-events-none fixed inset-0 z-[60] overflow-visible${isInspecting ? " cursor-crosshair" : ""}`} data-metaedit-chrome="true">
       {/* Hover Rect: Clean sharp bounding box precisely over the element */}
       {isInspecting && hoverRect && (
         <div
           style={{
             position: "absolute",
-            top: hoverRect.top,
-            left: hoverRect.left,
+            top: hoverRect.top - viewportOffset.y,
+            left: hoverRect.left - viewportOffset.x,
             width: hoverRect.width,
             height: hoverRect.height,
-            border: "1.5px solid #305dde",
-            backgroundColor: "rgba(48, 93, 222, 0.05)",
+            border: `1.5px solid ${accentColor}`,
+            backgroundColor: colorWithAlpha(accentColor, 0.05),
             boxSizing: "border-box",
             pointerEvents: "none",
             zIndex: 9999,
@@ -195,7 +275,7 @@ export function GlobalInspector({
               position: "absolute",
               top: "-22px",
               left: "0px",
-              backgroundColor: "#305dde",
+              backgroundColor: accentColor,
               color: "#ffffff",
               fontSize: "11px",
               fontWeight: 500,
@@ -217,24 +297,139 @@ export function GlobalInspector({
       )}
 
       {/* Selected Rect: Clean blue highlight */}
-      {selectedTarget && selectedRect && (
+      {selectedTarget?.selectionType !== "region" && selectedTarget && selectedRect && (
         <div
           style={{
             position: "absolute",
-            top: selectedRect.top,
-            left: selectedRect.left,
+            top: selectedRect.top - viewportOffset.y,
+            left: selectedRect.left - viewportOffset.x,
             width: selectedRect.width,
             height: selectedRect.height,
-            border: "2px solid #305dde",
-            backgroundColor: "rgba(48, 93, 222, 0.08)",
+            border: `2px solid ${accentColor}`,
+            backgroundColor: colorWithAlpha(accentColor, 0.08),
             boxSizing: "border-box",
             pointerEvents: "none",
             zIndex: 9998,
           }}
         />
       )}
+
+      {isInspecting && drawRect && (
+        <div
+          style={{
+            position: "fixed",
+            top: drawRect.top,
+            left: drawRect.left,
+            width: drawRect.width,
+            height: drawRect.height,
+            border: `2px solid ${accentColor}`,
+            backgroundColor: colorWithAlpha(accentColor, 0.1),
+            boxSizing: "border-box",
+            pointerEvents: "none",
+            zIndex: 10000,
+          }}
+        >
+          <div className="absolute left-0 top-0 -translate-y-full rounded-t-md px-2 py-1 text-[10px] font-medium text-white shadow-sm whitespace-nowrap" style={{ backgroundColor: accentColor }}>
+            Freeform area · release to select
+          </div>
+        </div>
+      )}
+
+      {selectedTarget?.selectionType === "region" && selectedTarget.region && (
+        <div
+          style={{
+            position: "fixed",
+            top: selectedTarget.region.top - viewportOffset.y,
+            left: selectedTarget.region.left - viewportOffset.x,
+            width: selectedTarget.region.width,
+            height: selectedTarget.region.height,
+            border: `2px solid ${accentColor}`,
+            backgroundColor: colorWithAlpha(accentColor, 0.08),
+            boxSizing: "border-box",
+            pointerEvents: "none",
+            zIndex: 9998,
+          }}
+        >
+          <div className="absolute left-0 top-0 -translate-y-full rounded-t-md px-2 py-1 text-[10px] font-medium text-white shadow-sm whitespace-nowrap" style={{ backgroundColor: accentColor }}>
+            Freeform area · {selectedTarget.highlightedElements?.length ?? 0} elements
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function isIgnoredTarget(target: HTMLElement | null, allowPageRoots: boolean): boolean {
+  if (!target || !(target instanceof Element)) return true;
+  if (target.closest("[data-metaedit-chrome]")) return true;
+  if (!allowPageRoots && (target === document.body || target === document.documentElement)) return true;
+  return false;
+}
+
+function colorWithAlpha(color: string, alpha: number) {
+  const match = color.trim().match(/^#([\da-f]{6})$/i);
+  if (!match) return color;
+  const value = Number.parseInt(match[1], 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function normalizeDrawRect(start: Point, end: Point): DrawRect {
+  return { top: Math.min(start.y, end.y), left: Math.min(start.x, end.x), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
+}
+
+function buildRegionTarget(rect: DrawRect, getElementMeta: (element: HTMLElement) => RectBox): TargetMetadata {
+  const scrollX = window.scrollX || document.documentElement.scrollLeft;
+  const scrollY = window.scrollY || document.documentElement.scrollTop;
+  const region = { top: rect.top + scrollY, left: rect.left + scrollX, width: rect.width, height: rect.height } satisfies MetaEditRect;
+  const highlightedElements = getHighlightedElements(rect, getElementMeta);
+  const elementSummary = highlightedElements.filter((element) => element.textSnapshot).slice(0, 6).map((element) => `${element.component}: ${element.textSnapshot.replace(/\s+/g, " ").slice(0, 180)}`).join(" | ");
+  const textSnapshot = elementSummary || "No text elements were intersected; the selected area is whitespace.";
+  const description = highlightedElements.length === 0
+    ? `Freeform region ${Math.round(rect.width)} × ${Math.round(rect.height)} px containing only whitespace.`
+    : `Freeform region ${Math.round(rect.width)} × ${Math.round(rect.height)} px intersecting ${highlightedElements.length} visible element${highlightedElements.length === 1 ? "" : "s"}.`;
+  const regionId = `region-${Math.round(region.left)}-${Math.round(region.top)}-${Math.round(region.width)}-${Math.round(region.height)}-${Date.now().toString(36)}`;
+  return {
+    component: "FreeformRegion",
+    source: "viewport",
+    instanceId: regionId,
+    selector: "body",
+    textSnapshot: textSnapshot.slice(0, 12000),
+    styleSnapshot: {},
+    selectionType: "region",
+    region,
+    boundingRect: region,
+    highlightedElements,
+    description,
+  };
+}
+
+function getHighlightedElements(rect: DrawRect, getElementMeta: (element: HTMLElement) => RectBox): HighlightedElement[] {
+  const selectors = "[data-component], h1, h2, h3, h4, h5, h6, p, button, a, input, textarea, section, article, nav, header, footer";
+  const seen = new Set<string>();
+  return Array.from(document.querySelectorAll<HTMLElement>(selectors)).map((element) => {
+    if (isIgnoredTarget(element, true) || element.hidden) return null;
+    const bounds = element.getBoundingClientRect();
+    const intersectionWidth = Math.max(0, Math.min(rect.left + rect.width, bounds.right) - Math.max(rect.left, bounds.left));
+    const intersectionHeight = Math.max(0, Math.min(rect.top + rect.height, bounds.bottom) - Math.max(rect.top, bounds.top));
+    const intersectionArea = intersectionWidth * intersectionHeight;
+    if (intersectionArea <= 0) return null;
+    const meta = getElementMeta(element);
+    if (seen.has(meta.selector)) return null;
+    seen.add(meta.selector);
+    return {
+      selector: meta.selector,
+      component: meta.componentName,
+      instanceId: meta.elementId,
+      tagName: meta.tagName,
+      textSnapshot: meta.textSnapshot.slice(0, 1200),
+      styleSnapshot: meta.styleSnapshot,
+      boundingRect: { top: meta.top, left: meta.left, width: meta.width, height: meta.height },
+      intersectionRatio: Math.min(1, intersectionArea / Math.max(1, bounds.width * bounds.height)),
+    } satisfies HighlightedElement;
+  }).filter((element): element is HighlightedElement => Boolean(element)).slice(0, 40);
 }
 
 function getStablePath(element: HTMLElement) {

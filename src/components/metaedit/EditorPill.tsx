@@ -4,46 +4,62 @@ import * as React from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
 import { BANNER } from "@/lib/springs";
-import { TargetMetadata } from "@/types/metaedit";
+import type { Collaborator, TargetMetadata } from "@/types/metaedit";
 import {
-  CursorPointer02Icon,
   Clock01Icon,
-  Delete02Icon,
   Logout03Icon,
   LockKeyIcon,
+  UserGroupIcon,
 } from "hugeicons-react";
 
 interface EditorPillProps {
-  isInspecting: boolean;
-  onToggleInspect: () => void;
   selectedTarget: TargetMetadata | null;
   onClearTarget: () => void;
   onRequestChange: (instruction: string) => void;
   onToggleActivity: () => void;
-  collaboratorCount: number;
-  activityCount: number;
+  activityButtonRef: React.RefObject<HTMLButtonElement | null>;
+  activityOpen: boolean;
+  collaborators: Collaborator[];
+  currentCollaboratorId?: string;
   hasSoftLock?: { author: string; color: string } | null;
   busy?: boolean;
   onExitMetaEdit: () => void;
-  webMCPAvailable?: boolean;
 }
 
 export function EditorPill({
-  isInspecting,
-  onToggleInspect,
   selectedTarget,
   onClearTarget,
   onRequestChange,
   onToggleActivity,
-  collaboratorCount,
-  activityCount,
+  activityButtonRef,
+  activityOpen,
+  collaborators,
+  currentCollaboratorId,
   hasSoftLock,
   busy = false,
   onExitMetaEdit,
-  webMCPAvailable = false,
 }: EditorPillProps) {
   const [instruction, setInstruction] = React.useState("");
+  const [onlineOpen, setOnlineOpen] = React.useState(false);
+  const onlineCloseTimer = React.useRef<number | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const activeCollaborators = React.useMemo(() => collaborators.filter((collaborator) => collaborator.displayName.trim()), [collaborators]);
+  const currentCollaborator = React.useMemo(() => activeCollaborators.find((collaborator) => collaborator.id === currentCollaboratorId), [activeCollaborators, currentCollaboratorId]);
+  const currentUserColor = currentCollaborator?.color ?? "#305dde";
+
+  const openOnlineList = () => {
+    if (onlineCloseTimer.current !== null) window.clearTimeout(onlineCloseTimer.current);
+    setOnlineOpen(true);
+  };
+
+  const scheduleCloseOnlineList = () => {
+    if (onlineCloseTimer.current !== null) window.clearTimeout(onlineCloseTimer.current);
+    onlineCloseTimer.current = window.setTimeout(() => setOnlineOpen(false), 120);
+  };
+
+  React.useEffect(() => () => {
+    if (onlineCloseTimer.current !== null) window.clearTimeout(onlineCloseTimer.current);
+  }, []);
   const coords = React.useMemo(() => {
     if (!selectedTarget?.boundingRect || typeof window === "undefined") return null;
     const { top, left, width, height } = selectedTarget.boundingRect;
@@ -87,64 +103,78 @@ export function EditorPill({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
           transition={BANNER}
-          className="fixed bottom-6 inset-x-0 z-50 flex flex-col items-center pointer-events-none px-3"
+          className="fixed bottom-6 inset-x-0 z-[70] flex flex-col items-center pointer-events-none px-3"
         >
-          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#191919]/10 bg-[#ffffff]/95 backdrop-blur-xl p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] max-w-full overflow-x-auto select-none">
-            {/* Inspect / Target Button */}
-            <button
-              onClick={onToggleInspect}
-              className={cn(
-                "flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 sm:px-3.5 text-xs font-medium cursor-pointer transition-all outline-none whitespace-nowrap",
-                isInspecting
-                  ? "bg-primary text-white shadow-sm ring-2 ring-primary/30"
-                  : "bg-[#f6f6f6] text-[#191919] hover:bg-[#eaeaea]"
-              )}
-            >
-              <CursorPointer02Icon className="size-3.5 shrink-0" />
-              <span className="hidden sm:inline">
-                {isInspecting ? "Inspecting (active)" : "Click element to edit"}
-              </span>
-              <span className="sm:hidden">
-                {isInspecting ? "Inspecting" : "Inspect"}
-              </span>
-            </button>
-
+          <div className="pointer-events-auto relative max-w-full">
+            <div className="flex items-center gap-0.5 rounded-full border border-[#191919]/10 bg-[#ffffff]/95 p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.08)] backdrop-blur-xl max-w-full overflow-x-auto select-none">
             {/* Activity Button */}
             <button
+              type="button"
+              ref={activityButtonRef}
               onClick={onToggleActivity}
-              className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[#f6f6f6] px-2.5 sm:px-3 text-xs font-medium text-[#191919] hover:bg-[#eaeaea] cursor-pointer transition-colors whitespace-nowrap"
-            >
-              <Clock01Icon className="size-3.5 text-[#8f8f8f] shrink-0" />
-              <span className="hidden sm:inline">Activity</span>
-              {activityCount > 0 && (
-                <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] text-white shrink-0">
-                  {activityCount}
-                </span>
+              aria-label="Activity"
+              aria-expanded={activityOpen}
+              title="Activity"
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full text-[#191919] cursor-pointer transition-colors",
+                activityOpen ? "bg-[#f6f6f6]" : "bg-transparent hover:bg-[#f6f6f6]"
               )}
+            >
+              <Clock01Icon className="size-4 text-[#6e6e6e]" />
             </button>
 
-            {/* Collaborator Count Badge */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2 text-xs text-[#8f8f8f] shrink-0 whitespace-nowrap">
-              <div className="mx-0.5 h-4 w-px bg-[#191919]/10" />
-              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="tabular-nums font-medium text-[#191919]">{collaboratorCount}</span>
-              <span>online</span>
-              <div className="mx-0.5 h-4 w-px bg-[#191919]/10" />
+              {/* Active collaborator list */}
+              <div className="relative flex shrink-0 items-center px-0 text-xs text-[#8f8f8f] whitespace-nowrap" onMouseEnter={openOnlineList} onMouseLeave={scheduleCloseOnlineList}>
+                <button
+                  type="button"
+                  onFocus={openOnlineList}
+                  onBlur={scheduleCloseOnlineList}
+                  aria-expanded={onlineOpen}
+                  aria-haspopup="dialog"
+                  aria-label="Collaborators"
+                  title="Collaborators"
+                  className="flex size-8 items-center justify-center rounded-full text-[#6e6e6e] transition-colors hover:bg-[#f6f6f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40"
+                >
+                  <span className="relative flex size-4 items-center justify-center">
+                    <UserGroupIcon className="size-4" />
+                    <span className="absolute -right-2 -top-2 flex min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-semibold leading-4 text-white" style={{ backgroundColor: currentUserColor }} aria-hidden="true">
+                      {activeCollaborators.length > 99 ? "99+" : activeCollaborators.length}
+                    </span>
+                  </span>
+                </button>
+              </div>
+
+              {/* Exit Mode Button */}
+              <button
+                type="button"
+                onClick={onExitMetaEdit}
+                aria-label="Exit MetaEdit"
+                title="Exit MetaEdit mode"
+                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-transparent text-[#6e6e6e] hover:bg-rose-50 hover:text-rose-600 cursor-pointer transition-colors"
+              >
+                <Logout03Icon className="size-4" />
+              </button>
             </div>
 
-            <span className={cn("hidden md:flex h-8 items-center rounded-full px-2.5 text-[10px] font-medium", webMCPAvailable ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-              {webMCPAvailable ? "Agent tools ready" : "WebMCP unavailable"}
-            </span>
-
-            {/* Exit Mode Button */}
-            <button
-              onClick={onExitMetaEdit}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 sm:px-3 text-xs font-medium text-[#8f8f8f] hover:bg-rose-50 hover:text-rose-600 cursor-pointer transition-colors whitespace-nowrap"
-              title="Exit MetaEdit mode"
-            >
-              <Logout03Icon className="size-3.5 shrink-0" />
-              <span className="hidden sm:inline">Exit</span>
-            </button>
+            {onlineOpen && (
+              <div
+                role="dialog"
+                aria-label="Active collaborators"
+                onMouseEnter={openOnlineList}
+                onMouseLeave={scheduleCloseOnlineList}
+                className="absolute bottom-[calc(100%+0.75rem)] left-1/2 z-[60] w-60 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-[#191919]/10 bg-white shadow-[0_12px_36px_rgba(0,0,0,0.14)]"
+              >
+                <ul className="space-y-1 p-2" aria-label="Active collaborators">
+                  {activeCollaborators.map((collaborator) => (
+                    <li key={collaborator.id} className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-sm text-[#191919]">
+                      <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: collaborator.color }} aria-hidden="true" />
+                      <span className="min-w-0 truncate">{collaborator.displayName}</span>
+                      {collaborator.id === currentCollaboratorId && <span className="shrink-0 text-xs text-[#8f8f8f]">you</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </motion.div>
       ) : (
@@ -182,12 +212,18 @@ export function EditorPill({
               {/* Header Title Row: Component Name + Instance ID */}
               <div className="flex items-center justify-between text-xs px-2 pt-1">
                 <span className="font-medium text-[#191919] truncate max-w-[200px]">
-                  {selectedTarget.component}
+                  {selectedTarget.selectionType === "region" ? "Freeform area" : selectedTarget.component}
                 </span>
                 <span className="font-mono text-[11px] text-[#8f8f8f]">
-                  #{selectedTarget.instanceId}
+                  {selectedTarget.selectionType === "region" ? `${selectedTarget.highlightedElements?.length ?? 0} elements` : `#${selectedTarget.instanceId}`}
                 </span>
               </div>
+
+              {selectedTarget.selectionType === "region" && (
+                <p className="px-2 text-[11px] leading-4 text-[#6e6e6e]">
+                  {selectedTarget.description ?? "A freeform area of the page, including any elements and whitespace inside it."}
+                </p>
+              )}
 
               {/* Textarea: "Add an optional comment..." */}
               <textarea
@@ -202,18 +238,7 @@ export function EditorPill({
               />
 
               {/* Bottom Action Row with Concentric Inset */}
-              <div className="flex items-center justify-between">
-                {/* Trash Button */}
-                <button
-                  type="button"
-                  onClick={onClearTarget}
-                  className="flex size-8 items-center justify-center rounded-full text-[#8f8f8f] hover:text-[#191919] hover:bg-[#f6f6f6] transition-colors cursor-pointer"
-                  title="Discard comment"
-                >
-                  <Delete02Icon className="size-3.5" />
-                </button>
-
-                {/* Right Action Buttons */}
+              <div className="flex items-center justify-end">
                 <div className="flex items-center gap-1">
                   <button
                     type="button"

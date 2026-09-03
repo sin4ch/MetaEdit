@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
@@ -19,6 +19,8 @@ export const collaborators = sqliteTable(
     color: text("color").notNull(),
     sessionExpiresAt: integer("session_expires_at").notNull(),
     lastSeenAt: integer("last_seen_at").notNull(),
+    cursorX: real("cursor_x"),
+    cursorY: real("cursor_y"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
