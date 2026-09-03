@@ -97,8 +97,13 @@ export function WebMCPRegistry({ enabled, state, onState, onStatus }: { enabled:
       },
     ];
     const controller = new AbortController();
-    void Promise.all(tools.map((tool) => Promise.resolve().then(() => context.registerTool(tool, { signal: controller.signal })))).catch((error: unknown) => {
-      if (!controller.signal.aborted) console.warn("MetaEdit WebMCP tool registration failed", error);
+    void Promise.all(tools.map((tool) => Promise.resolve().then(() => context.registerTool(tool, { signal: controller.signal })))).then(() => {
+      if (!controller.signal.aborted) onStatus?.(true);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        onStatus?.(false);
+        console.warn("MetaEdit WebMCP tool registration failed", error);
+      }
     });
     return () => controller.abort();
   }, [enabled, onStatus]);
