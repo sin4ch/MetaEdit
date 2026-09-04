@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { asRecord, captureBeforeOperations, readString, validatePatchOperations, validateTarget } from "@/lib/metaedit-contract";
+import { asRecord, captureBeforeOperations, readString, validatePatchOperations, validateScreenshot, validateTarget } from "@/lib/metaedit-contract";
 import { createCollaborator, createSessionCookie, readSession, requireSession, sessionCookie, verifyAccessToken } from "@/lib/server/metaedit-auth";
 import { ensureDatabase, getAnnotation, getRevision, idempotent, readWorkspaceState, recordActivity, WORKSPACE_ID } from "@/lib/server/metaedit-db";
+import { createRevisionPullRequest } from "@/lib/server/github";
 import { getD1 } from "../../../../db";
 
 export const runtime = "edge";
@@ -67,10 +68,11 @@ export async function POST(request: Request) {
     if (action === "create_annotation") {
       const target = validateTarget(body.target);
       const comment = readString(body, "comment", { min: 1, max: 4000 })!;
+      const beforeScreenshot = validateScreenshot(body.beforeScreenshot);
       const result = await idempotent(key, async () => {
         const id = crypto.randomUUID();
         const now = Date.now();
-        await getD1().prepare(`INSERT INTO annotations (id, workspace_id, author_id, author_name, target_id, selector, component, source, text_snapshot, style_snapshot, selection_type, region_json, highlighted_elements_json, comment, status, agent_state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 'unseen', ?, ?)`).bind(id, WORKSPACE_ID, collaborator.id, collaborator.displayName, target.instanceId, target.selector, target.component, target.source, target.textSnapshot, JSON.stringify(target.styleSnapshot), target.selectionType ?? "element", target.region ? JSON.stringify(target.region) : null, target.highlightedElements ? JSON.stringify(target.highlightedElements) : null, comment, now, now).run();
+        await getD1().prepare(`INSERT INTO annotations (id, workspace_id, author_id, author_name, target_id, selector, component, source, text_snapshot, style_snapshot, selection_type, region_json, highlighted_elements_json, comment, status, agent_state, before_screenshot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', 'unseen', ?, ?, ?)`).bind(id, WORKSPACE_ID, collaborator.id, collaborator.displayName, target.instanceId, target.selector, target.component, target.source, target.textSnapshot, JSON.stringify(target.styleSnapshot), target.selectionType ?? "element", target.region ? JSON.stringify(target.region) : null, target.highlightedElements ? JSON.stringify(target.highlightedElements) : null, comment, beforeScreenshot, now, now).run();
         const targetLabel = target.selectionType === "region" ? `freeform region containing ${target.highlightedElements?.length ?? 0} visible element${target.highlightedElements?.length === 1 ? "" : "s"}` : `${target.component} (#${target.instanceId})`;
         await recordActivity("annotation.created", collaborator, id, `${collaborator.displayName} annotated ${targetLabel}.`);
         return { annotationId: id };
@@ -96,17 +98,19 @@ export async function POST(request: Request) {
       if (patch.some((operation) => !allowedSelectors.has(operation.selector))) return NextResponse.json({ error: "This revision may only change elements inside the annotated target." }, { status: 400 });
       const result = await idempotent(key, async () => {
         const versionRow = await getD1().prepare(`SELECT COALESCE(MAX(version), 0) AS version FROM revisions WHERE workspace_id = ?`).bind(WORKSPACE_ID).first<{ version: number }>();
-        const baseVersion = Number(body.baseVersion ?? versionRow?.version ?? 0);
-        if (baseVersion !== Number(versionRow?.version ?? 0)) throw new Error(`The workspace changed. Refresh and propose against version ${versionRow?.version ?? 0}.`);
+        const latestVersion = Number(versionRow?.version ?? 0);
+        const requestedBaseVersion = body.baseVersion === undefined ? latestVersion : Number(body.baseVersion);
+        if (!Number.isInteger(requestedBaseVersion) || requestedBaseVersion < 0 || requestedBaseVersion > latestVersion) throw new Error(`baseVersion must be an integer between 0 and ${latestVersion}.`);
+        const parent = requestedBaseVersion > 0 ? await getD1().prepare(`SELECT id FROM revisions WHERE workspace_id = ? AND version <= ? ORDER BY version DESC LIMIT 1`).bind(WORKSPACE_ID, requestedBaseVersion).first<{ id: string }>() : null;
         const id = crypto.randomUUID();
-        const version = baseVersion + 1;
+        const version = latestVersion + 1;
         const now = Date.now();
         await getD1().batch([
-          getD1().prepare(`INSERT INTO revisions (id, workspace_id, annotation_id, author_id, author_name, instruction, base_version, version, status, patch_json, before_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`).bind(id, WORKSPACE_ID, annotationId, collaborator.id, collaborator.displayName, instruction, baseVersion, version, JSON.stringify(patch), JSON.stringify(captureBeforeOperations(patch, annotation)), now, now),
+          getD1().prepare(`INSERT INTO revisions (id, workspace_id, annotation_id, author_id, author_name, instruction, base_version, parent_revision_id, version, status, patch_json, before_json, before_screenshot, publish_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'idle', ?, ?)`).bind(id, WORKSPACE_ID, annotationId, collaborator.id, collaborator.displayName, instruction, requestedBaseVersion, parent?.id ?? null, version, JSON.stringify(patch), JSON.stringify(captureBeforeOperations(patch, annotation)), annotation.beforeScreenshot ?? null, now, now),
           getD1().prepare(`UPDATE annotations SET agent_state = 'in_progress', updated_at = ? WHERE id = ?`).bind(now, annotationId),
         ]);
         await recordActivity("revision.proposed", collaborator, id, `${collaborator.displayName} proposed revision v${version} for ${annotation.component}.`);
-        return { revisionId: id, version };
+        return { revisionId: id, version, parentRevisionId: parent?.id ?? null };
       });
       return NextResponse.json({ ...result, state: await readWorkspaceState(collaborator.id) });
     }
@@ -126,12 +130,25 @@ export async function POST(request: Request) {
         const rejected = reviews.results.some((row) => row.decision === "rejected" && Number(row.count) > 0);
         const approvedCount = Number(reviews.results.find((row) => row.decision === "approved")?.count ?? 0);
         const status = rejected ? "rejected" : approvedCount >= Math.max(1, Number(active?.count ?? 1)) ? "approved" : "proposed";
-        await getD1().prepare(`UPDATE revisions SET status = ?, updated_at = ? WHERE id = ?`).bind(status, now, revisionId).run();
+        await getD1().prepare(`UPDATE revisions SET status = ?, publish_status = 'idle', updated_at = ? WHERE id = ?`).bind(status, now, revisionId).run();
         if (revision.annotationId) {
           const agentState = status === "approved" ? "done" : status === "rejected" ? "seen" : "in_progress";
           await getD1().prepare(`UPDATE annotations SET agent_state = ?, updated_at = ? WHERE id = ?`).bind(agentState, now, revision.annotationId).run();
         }
         await recordActivity(`revision.${decision}`, collaborator, revisionId, `${collaborator.displayName} ${decision} revision v${revision.version}.`);
+        return { ok: true };
+      });
+      return NextResponse.json({ ok: true, state: await readWorkspaceState(collaborator.id) });
+    }
+
+    if (action === "request_publish") {
+      if (collaborator.role !== "owner") return NextResponse.json({ error: "Only the workspace owner can request publishing." }, { status: 403 });
+      const revisionId = readString(body, "revisionId", { max: 120 })!;
+      const revision = await getRevision(revisionId);
+      if (!revision) return NextResponse.json({ error: "Revision not found." }, { status: 404 });
+      if (revision.status !== "approved") return NextResponse.json({ error: "The revision must be approved before publishing." }, { status: 409 });
+      await idempotent(key, async () => {
+        await recordActivity("revision.publish_requested", collaborator, revisionId, `${collaborator.displayName} requested publication of revision v${revision.version}.`);
         return { ok: true };
       });
       return NextResponse.json({ ok: true, state: await readWorkspaceState(collaborator.id) });
@@ -143,17 +160,32 @@ export async function POST(request: Request) {
       const revision = await getRevision(revisionId);
       if (!revision) return NextResponse.json({ error: "Revision not found." }, { status: 404 });
       if (revision.status !== "approved") return NextResponse.json({ error: "Every active collaborator must approve before publishing." }, { status: 409 });
-      await idempotent(key, async () => {
+      const afterScreenshot = validateScreenshot(body.afterScreenshot);
+      const result = await idempotent(key, async () => {
         const now = Date.now();
-        await getD1().batch([
-          getD1().prepare(`UPDATE revisions SET status = 'published', published_at = ?, updated_at = ? WHERE id = ?`).bind(now, now, revisionId),
-          getD1().prepare(`UPDATE workspaces SET published_version = ? WHERE id = ?`).bind(revision.version, WORKSPACE_ID),
-          getD1().prepare(`UPDATE annotations SET status = 'resolved', agent_state = 'done', updated_at = ? WHERE id = ?`).bind(now, revision.annotationId),
-        ]);
-        await recordActivity("revision.published", collaborator, revisionId, `${collaborator.displayName} published revision v${revision.version}.`);
-        return { ok: true };
+        await getD1().prepare(`UPDATE revisions SET publish_status = 'creating', after_screenshot = COALESCE(?, after_screenshot), updated_at = ? WHERE id = ?`).bind(afterScreenshot, now, revisionId).run();
+        await recordActivity("revision.publish_requested", collaborator, revisionId, `${collaborator.displayName} requested publication of revision v${revision.version}.`);
+        await recordActivity("revision.publish_started", collaborator, revisionId, `${collaborator.displayName} is creating a pull request for revision v${revision.version}.`);
+        try {
+          const annotation = revision.annotationId ? await getAnnotation(revision.annotationId) : null;
+          if (!annotation) throw new Error("The revision is missing its annotation target.");
+          const effectiveAfterScreenshot = afterScreenshot ?? revision.afterScreenshot ?? null;
+          const pullRequest = await createRevisionPullRequest({ ...revision, afterScreenshot: effectiveAfterScreenshot }, annotation, effectiveAfterScreenshot);
+          const completedAt = Date.now();
+          await getD1().batch([
+            getD1().prepare(`UPDATE revisions SET status = 'published', publish_status = 'ready', after_screenshot = COALESCE(?, after_screenshot), github_pr_url = ?, github_pr_number = ?, github_commit_sha = ?, published_at = ?, updated_at = ? WHERE id = ?`).bind(afterScreenshot, pullRequest?.url ?? null, pullRequest?.number ?? null, pullRequest?.commitSha ?? null, completedAt, completedAt, revisionId),
+            getD1().prepare(`UPDATE workspaces SET published_version = ? WHERE id = ?`).bind(revision.version, WORKSPACE_ID),
+            getD1().prepare(`UPDATE annotations SET status = 'resolved', agent_state = 'done', updated_at = ? WHERE id = ?`).bind(completedAt, revision.annotationId),
+          ]);
+          await recordActivity("revision.published", collaborator, revisionId, pullRequest ? `${collaborator.displayName} opened pull request #${pullRequest.number} for revision v${revision.version}.` : `${collaborator.displayName} published revision v${revision.version}.`);
+          return { ok: true, pullRequest };
+        } catch (error) {
+          await getD1().prepare(`UPDATE revisions SET publish_status = 'failed', updated_at = ? WHERE id = ?`).bind(Date.now(), revisionId).run();
+          await recordActivity("revision.publish_failed", collaborator, revisionId, `${collaborator.displayName} could not publish revision v${revision.version}.`);
+          throw error;
+        }
       });
-      return NextResponse.json({ ok: true, state: await readWorkspaceState(collaborator.id) });
+      return NextResponse.json({ ...result, state: await readWorkspaceState(collaborator.id) });
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });

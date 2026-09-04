@@ -90,6 +90,13 @@ export function validateTarget(value: unknown): TargetMetadata {
   };
 }
 
+export function validateScreenshot(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || value.length > 900_000) throw new Error("Screenshot must be a small image data URL.");
+  if (!/^data:image\/(?:svg\+xml|png|jpeg);base64,[a-zA-Z0-9+/=]+$/.test(value)) throw new Error("Screenshot must be a base64 SVG, PNG, or JPEG data URL.");
+  return value;
+}
+
 export function validatePatchOperations(value: unknown): PatchOperation[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 20) throw new Error("patch must contain between 1 and 20 operations.");
   return value.map((raw) => {

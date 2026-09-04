@@ -12,6 +12,6 @@ export function getD1(): D1Database {
   return env.DB;
 }
 
-export function getRuntimeSecret(name: "METAEDIT_SESSION_TOKEN_HASH" | "METAEDIT_COOKIE_SECRET") {
+export function getRuntimeSecret(name: "METAEDIT_SESSION_TOKEN_HASH" | "METAEDIT_COOKIE_SECRET" | "GITHUB_TOKEN" | "GITHUB_OWNER" | "GITHUB_REPOSITORY" | "GITHUB_BASE_BRANCH") {
   return env[name] ?? process.env[name];
 }

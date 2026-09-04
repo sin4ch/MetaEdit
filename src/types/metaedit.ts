@@ -64,6 +64,7 @@ export interface Annotation {
   region?: MetaEditRect | null;
   highlightedElements?: HighlightedElement[];
   agentState?: AnnotationAgentState;
+  beforeScreenshot?: string | null;
   comment: string;
   status: AnnotationStatus;
   createdAt: string;
@@ -94,6 +95,7 @@ export interface Revision {
   authorColor?: string;
   instruction: string;
   baseVersion: number;
+  parentRevisionId?: string | null;
   version: number;
   status: RevisionStatus;
   patch: PatchOperation[];
@@ -102,6 +104,12 @@ export interface Revision {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string | null;
+  beforeScreenshot?: string | null;
+  afterScreenshot?: string | null;
+  githubPrUrl?: string | null;
+  githubPrNumber?: number | null;
+  githubCommitSha?: string | null;
+  publishStatus?: "idle" | "creating" | "ready" | "failed";
 }
 
 export interface ActivityEvent {

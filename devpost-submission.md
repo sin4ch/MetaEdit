@@ -12,11 +12,11 @@ People usually leave the page they are reviewing, describe a change in chat, and
 
 ## Solution
 
-MetaEdit adds an editing surface to the same website through the `metaedit.` subdomain. An authenticated collaborator clicks an element, sees its stable selector and style snapshot, and leaves a comment. A WebMCP-capable browser agent can read the annotation, inspect the current workspace version, and propose a constrained text, style, or visibility patch. The patch stays in preview until collaborators approve it. The workspace owner publishes the approved revision from the page.
+MetaEdit adds an editing surface to the same website through the `metaedit.` subdomain. An authenticated collaborator clicks an element, sees its stable selector and style snapshot, and leaves a comment. A WebMCP-capable browser agent can read the annotation, inspect the current workspace version, and propose a constrained text, style, or visibility patch. The patch stays in preview until collaborators approve it. The workspace owner confirms publication from the page, which creates a GitHub branch, commits the structured revision plus cropped before/after evidence, and opens a pull request.
 
 ## Why This Matters
 
-The browser agent receives the page context at the point where the human is looking at it. The human keeps the final decision. The shared activity feed records who annotated which target, which revision was proposed, who approved it, and what version was published.
+The browser agent receives the page context at the point where the human is looking at it. The human keeps the final decision. A Cloudflare Durable Object keeps cursors live across sessions, while the D1-backed activity feed records who annotated which target, which revision was proposed, who approved it, and which pull request was opened.
 
 ## How We Used AI
 
@@ -40,7 +40,7 @@ Codex helped shape the WebMCP contract, implement the D1-backed workspace API, b
 
 ## Architecture
 
-The React page renders both visitor and authenticated editor modes. `GlobalInspector` collects target metadata. `WebMCPRegistry` registers the browser tools after authentication and keeps current state in refs so tool calls do not require re-registration. `/api/metaedit` validates every mutation, writes to D1, records activity, and returns the new workspace state. `PatchRuntime` applies preview or published operations in the DOM.
+The React page renders both visitor and authenticated editor modes. `GlobalInspector` collects target metadata. `WebMCPRegistry` registers the browser tools after authentication and keeps current state in refs so tool calls do not require re-registration. `/api/metaedit` validates every mutation, writes to D1, records activity, and returns the new workspace state. `PatchRuntime` applies preview or published operations in the DOM. `github.ts` creates the review branch and pull request when the owner confirms publication.
 
 ## Testing Instructions
 
@@ -57,7 +57,8 @@ For a WebMCP-capable browser agent:
 2. Call `metaedit_list_annotations`.
 3. Call `metaedit_inspect_annotation` for the selected annotation.
 4. Propose a patch using the annotation selector and current workspace version.
-5. Review the revision, inspect before/after, and publish it as the owner.
+5. Review the revision, inspect before/after, and choose **Publish** as the owner.
+6. Confirm the warning, wait for the spinner, then open the generated pull request and its screenshot evidence.
 
 Automated checks used for this draft:
 
@@ -70,7 +71,7 @@ npx vinext check
 
 ## Public Demo Link
 
-TODO: add the live URL. This field is intentionally blank for the current handoff.
+https://metaedit.me.sin4.ch
 
 ## Public Repository Link
 
@@ -92,7 +93,7 @@ Suggested sequence:
 ## Screenshot Shot List
 
 - Visitor mode with no editor controls.
-- Authenticated MetaEdit mode with inspector, collaborator presence, and activity count.
+- Authenticated MetaEdit mode with inspector, collaborator presence, and activity feed.
 - An annotation card showing author, comment, component, and target ID.
 - Before/after revision view with approval state.
 - Published revision visible after leaving MetaEdit.
@@ -104,7 +105,8 @@ Suggested sequence:
 - [x] Source pushed to the public `sin4ch/MetaEdit` repository.
 - [x] Local sign-in tested after restarting Vinext with a reachable hostname.
 - [x] WebMCP cleanup crash fixed and authenticated page re-tested with no browser errors.
-- [ ] Add the live URL.
+- [x] Cloudflare zone activated and `metaedit.me.sin4.ch` attached to the Worker (certificate propagation may take a few minutes).
+- [x] Add the live URL.
 - [ ] Record and publish the demo video.
 - [ ] Complete account-specific Devpost fields and submit the form.
 - [ ] Verify the final public demo and repository from an incognito browser.
@@ -113,7 +115,7 @@ Suggested sequence:
 
 - The demo uses one default workspace rather than organization-level workspaces.
 - The demo token is deliberately simple for hackathon testing; production installations should use a workspace-specific token.
-- Patches are intentionally limited to text, an allowlisted CSS property, or visibility. The prototype does not edit arbitrary source files.
+- Patches are intentionally limited to text, an allowlisted CSS property, or visibility. Source commits apply an exact text replacement when the annotated snapshot is present; other operations are preserved in the review manifest for the developer.
 - WebMCP tool invocation must be verified in a browser build that exposes the WebMCP API to the agent.
 - The Cloudflare deployment uses the provisioned `metaedit-production` D1 database and hosted session-token and cookie secrets.
 
@@ -125,10 +127,10 @@ Fill these in on Devpost after choosing the final live URL and testing client:
 - Country of residence: TODO
 - App status: TODO
 - Existing-app update explanation, if applicable: TODO
-- Live URL: TODO
+- Live URL: https://metaedit.me.sin4.ch (Cloudflare Worker; `https://metaedit.okparaosi17.workers.dev` is the fallback)
 - Testing instructions and credentials: any display name / `WEBMCP` for the deployed demo
 - Public code repository: https://github.com/sin4ch/MetaEdit
-- Agents or clients tested with WebMCP tools: TODO, verify in WebMCP-enabled Chrome
+- Agents or clients tested with WebMCP tools: WebMCP-enabled Chrome (verify the final browser build before submitting)
 - AI tools leveraged: Codex and the browser agent used for the WebMCP demo
 - Learning level: TODO
 - AI value useful in career: TODO

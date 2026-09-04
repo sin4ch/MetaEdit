@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ToastContainer, ToastItem } from "@/components/ui/Toast";
 import type { Annotation, TargetMetadata, MetaEditSession, WorkspaceState } from "@/types/metaedit";
 import { fetchWorkspaceState, focusMetaEditRegion, focusMetaEditTarget, metaEditRequest } from "@/lib/metaedit-client";
+import { annotationToScreenshotTarget, captureMetaEditScreenshot } from "@/lib/metaedit-screenshot";
 import { PatchRuntime } from "@/components/metaedit/PatchRuntime";
 import { WebMCPRegistry } from "@/components/metaedit/WebMCPRegistry";
 import {
@@ -37,10 +38,14 @@ export default function MetaEditPage() {
   const [selectedTarget, setSelectedTarget] = React.useState<TargetMetadata | null>(null);
   const [activityOpen, setActivityOpen] = React.useState(false);
   const [exitConfirmOpen, setExitConfirmOpen] = React.useState(false);
+  const [publishConfirmRevisionId, setPublishConfirmRevisionId] = React.useState<string | null>(null);
+  const [publishingRevisionId, setPublishingRevisionId] = React.useState<string | null>(null);
   const [inspectTipDismissed, setInspectTipDismissed] = React.useState(false);
   const activityButtonRef = React.useRef<HTMLButtonElement>(null);
   const cursorRef = React.useRef<{ x: number; y: number } | null>(null);
+  const presenceSocketRef = React.useRef<WebSocket | null>(null);
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
+  const seenActivityIdsRef = React.useRef<Set<string>>(new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("product");
 
@@ -71,6 +76,56 @@ export default function MetaEditPage() {
   React.useEffect(() => {
     if (!isMetaEditMode) return;
     let requestInFlight = false;
+    let socket: WebSocket | null = null;
+    let sendFrame: number | null = null;
+
+    const mergePresence = (payload: {
+      type?: string;
+      collaborators?: Array<{ collaboratorId: string; displayName: string; color: string; cursor: { x: number; y: number } | null }>;
+      collaborator?: { collaboratorId: string; displayName: string; color: string; cursor: { x: number; y: number } | null };
+      collaboratorId?: string;
+    }) => {
+      setWorkspaceState((previous) => {
+        if (!previous) return previous;
+        const currentId = previous.currentCollaborator?.id;
+        const byId = new Map(previous.collaborators.map((item) => [item.id, item]));
+        const upsert = (item: { collaboratorId: string; displayName: string; color: string; cursor: { x: number; y: number } | null }) => {
+          if (!item.collaboratorId || item.collaboratorId === currentId) return;
+          const existing = byId.get(item.collaboratorId);
+          byId.set(item.collaboratorId, {
+            id: item.collaboratorId,
+            displayName: item.displayName,
+            role: existing?.role ?? "editor",
+            color: item.color,
+            email: existing?.email ?? null,
+            lastSeenAt: new Date().toISOString(),
+            cursor: item.cursor ?? undefined,
+          });
+        };
+
+        if (payload.type === "presence.snapshot") payload.collaborators?.forEach(upsert);
+        if (payload.type === "presence.joined" || payload.type === "cursor") {
+          if (payload.collaborator) upsert(payload.collaborator);
+        }
+        if (payload.type === "presence.left" && payload.collaboratorId) {
+          const existing = byId.get(payload.collaboratorId);
+          if (existing) byId.set(payload.collaboratorId, { ...existing, cursor: undefined, lastSeenAt: new Date(0).toISOString() });
+        }
+
+        return { ...previous, collaborators: Array.from(byId.values()).filter((item) => item.id === currentId || item.lastSeenAt !== new Date(0).toISOString()) };
+      });
+    };
+
+    const sendCursor = () => {
+      sendFrame = null;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      const cursor = cursorRef.current;
+      socket.send(JSON.stringify(cursor ? { type: "cursor", x: cursor.x, y: cursor.y } : { type: "cursor", x: null, y: null }));
+    };
+    const sendCursorSoon = () => {
+      if (sendFrame !== null) return;
+      sendFrame = window.requestAnimationFrame(sendCursor);
+    };
     const refresh = () => {
       if (requestInFlight) return;
       requestInFlight = true;
@@ -82,12 +137,30 @@ export default function MetaEditPage() {
     };
     const updateCursor = (event: PointerEvent) => {
       cursorRef.current = { x: event.clientX, y: event.clientY };
+      sendCursorSoon();
     };
     const clearCursor = () => {
       if (cursorRef.current === null) return;
       cursorRef.current = null;
+      sendCursorSoon();
       refresh();
     };
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    try {
+      socket = new WebSocket(`${protocol}//${window.location.host}/api/metaedit/presence`);
+      presenceSocketRef.current = socket;
+      socket.addEventListener("open", sendCursorSoon);
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") return;
+        try { mergePresence(JSON.parse(event.data) as Parameters<typeof mergePresence>[0]); } catch { /* ignore malformed presence frames */ }
+      });
+      socket.addEventListener("close", () => {
+        if (presenceSocketRef.current === socket) presenceSocketRef.current = null;
+      });
+    } catch {
+      socket = null;
+    }
     window.addEventListener("pointermove", updateCursor, { passive: true });
     window.addEventListener("pointerleave", clearCursor, { passive: true });
     window.addEventListener("blur", clearCursor, { passive: true });
@@ -100,16 +173,36 @@ export default function MetaEditPage() {
       window.removeEventListener("pointerleave", clearCursor);
       window.removeEventListener("blur", clearCursor);
       document.removeEventListener("visibilitychange", clearCursor);
+      if (sendFrame !== null) window.cancelAnimationFrame(sendFrame);
+      if (socket?.readyState === WebSocket.OPEN) {
+        try { socket.send(JSON.stringify({ type: "cursor", x: null, y: null })); } catch { /* socket is closing */ }
+      }
+      socket?.close(1000, "MetaEdit session ended.");
+      if (presenceSocketRef.current === socket) presenceSocketRef.current = null;
     };
   }, [isMetaEditMode]);
 
-  const addToast = (title: string, description?: string, tone: "good" | "bad" | "info" = "good") => {
+  const addToast = React.useCallback((title: string, description?: string, tone: "good" | "bad" | "info" = "good") => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     setToasts((prev) => [...prev, { id, title, description, tone }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4500);
-  };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isMetaEditMode || !workspaceState) return;
+    const currentId = workspaceState.currentCollaborator?.id;
+    const recentEvents = workspaceState.activity.slice().reverse();
+    for (const event of recentEvents) {
+      if (seenActivityIdsRef.current.has(event.id)) continue;
+      seenActivityIdsRef.current.add(event.id);
+      if (event.actorId === currentId) continue;
+      if (event.kind === "revision.publish_requested") window.setTimeout(() => addToast("Publish requested", `${event.actorName} is asking to send an approved revision to GitHub.`, "info"), 0);
+      if (event.kind === "revision.publish_failed") window.setTimeout(() => addToast("Publish failed", `${event.actorName}'s pull request could not be created.`, "bad"), 0);
+    }
+    if (seenActivityIdsRef.current.size > 500) seenActivityIdsRef.current = new Set(workspaceState.activity.map((event) => event.id));
+  }, [addToast, isMetaEditMode, workspaceState]);
 
   const handleAuthorizeSession = ({ session, state }: { session: MetaEditSession; state: WorkspaceState }) => {
     setWorkspaceState(state);
@@ -159,9 +252,10 @@ export default function MetaEditPage() {
 
   const handleRequestChange = async (instruction: string) => {
     if (!selectedTarget) return;
+    const beforeScreenshot = captureMetaEditScreenshot(selectedTarget);
     setBusyRequest(true);
     try {
-      const response = await metaEditRequest<{ state: WorkspaceState }>("create_annotation", { target: selectedTarget, comment: instruction });
+      const response = await metaEditRequest<{ state: WorkspaceState }>("create_annotation", { target: selectedTarget, comment: instruction, beforeScreenshot });
       setWorkspaceState(response.state);
       setSelectedTarget(null);
       setIsInspecting(true);
@@ -182,12 +276,35 @@ export default function MetaEditPage() {
     } catch (error) { addToast("Review failed", error instanceof Error ? error.message : "Try again.", "bad"); }
   };
 
-  const handlePublishRevision = async (revisionId: string) => {
+  const handlePublishRevision = (revisionId: string) => {
+    setPublishConfirmRevisionId(revisionId);
+  };
+
+  const confirmPublishRevision = async () => {
+    const revisionId = publishConfirmRevisionId;
+    if (!revisionId || publishingRevisionId) return;
+    const revision = workspaceState?.revisions.find((item) => item.id === revisionId);
+    const annotation = revision?.annotationId ? workspaceState?.annotations.find((item) => item.id === revision.annotationId) : undefined;
+    if (!revision || !annotation) {
+      setPublishConfirmRevisionId(null);
+      addToast("Publish blocked", "The annotated target is no longer available.", "bad");
+      return;
+    }
+    setPublishingRevisionId(revisionId);
+    setPublishConfirmRevisionId(null);
+    setComparison({ revisionId, mode: "after" });
     try {
-      const response = await metaEditRequest<{ state: WorkspaceState }>("publish_revision", { revisionId });
+      await waitForPaint();
+      const afterScreenshot = captureMetaEditScreenshot(annotationToScreenshotTarget(annotation));
+      const response = await metaEditRequest<{ state: WorkspaceState; pullRequest?: { url: string; number: number } | null }>("publish_revision", { revisionId, afterScreenshot });
       setWorkspaceState(response.state);
-      addToast("Published", "The approved revision is now visible on the public page.", "good");
+      const pullRequest = response.pullRequest;
+      addToast(pullRequest ? "Pull request created" : "Published", pullRequest ? `Review PR #${pullRequest.number} in GitHub.` : "The approved revision is now visible on the public page.", "good");
     } catch (error) { addToast("Publish blocked", error instanceof Error ? error.message : "Try again.", "bad"); }
+    finally {
+      setPublishingRevisionId(null);
+      setComparison(null);
+    }
   };
 
   return (
@@ -690,7 +807,7 @@ export default function MetaEditPage() {
               },
               {
                 q: "Does MetaEdit push changes to my Git repository?",
-                a: "No. MetaEdit deliberately keeps collaboration separate from source deployment. It stores versioned, attributed UI patches, previews them safely, and publishes approved patches to the public rendering without writing to your repository.",
+                a: "Yes, but only after review. The owner confirms publication, then MetaEdit creates a branch, commits the structured patch and before/after evidence, and opens a GitHub pull request. The preview remains visible in the workspace while the pull request goes through your normal engineering review.",
               },
               {
                 q: "What happens if two teammates edit the same element at once?",
@@ -819,6 +936,19 @@ export default function MetaEditPage() {
         </div>
       </Modal>
 
+      <Modal open={Boolean(publishConfirmRevisionId)} onClose={() => { if (!publishingRevisionId) setPublishConfirmRevisionId(null); }} className="max-w-sm rounded-2xl bg-white p-6">
+        <div className="space-y-5">
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium text-[#191919]">Create a pull request?</h2>
+            <p className="text-sm leading-relaxed text-[#6e6e6e]">This sends the approved preview to GitHub with its structured patch and before/after screenshots. Other collaborators will see that publishing has started.</p>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setPublishConfirmRevisionId(null)} className="h-9 rounded-full px-4 text-sm font-medium text-[#6e6e6e] transition hover:bg-[#f3f3f3] hover:text-[#191919]">Cancel</button>
+            <button type="button" onClick={confirmPublishRevision} className="h-9 rounded-full bg-[#191919] px-4 text-sm font-medium text-white transition hover:bg-[#303030]">Create pull request</button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Activity & History Panel */}
       <ActivityPanel
         open={activityOpen}
@@ -830,7 +960,12 @@ export default function MetaEditPage() {
         onFocus={(annotation: Annotation) => { const color = annotation.authorColor ?? workspaceState?.currentCollaborator?.color; if (annotation.selectionType === "region" && annotation.region) focusMetaEditRegion(annotation.region, color); else focusMetaEditTarget(annotation.selector, color); setActivityOpen(false); }}
         onReview={handleReviewRevision}
         onPublish={handlePublishRevision}
+        publishingRevisionId={publishingRevisionId}
       />
     </div>
   );
+}
+
+function waitForPaint() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 }

@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { focusMetaEditTarget, metaEditRequest } from "@/lib/metaedit-client";
-import type { WorkspaceState } from "@/types/metaedit";
+import { annotationToScreenshotTarget, captureMetaEditScreenshot } from "@/lib/metaedit-screenshot";
+import type { TargetMetadata, WorkspaceState } from "@/types/metaedit";
 
 const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
 
@@ -73,11 +74,15 @@ export function WebMCPRegistry({ enabled, state, onState, onStatus }: { enabled:
         description: "Create an attributed annotation for an element or a freeform region. For a region, preserve the raw rectangle and highlightedElements list so the agent can understand every intersected element without snapping the selection.",
         inputSchema: { type: "object", properties: { target: { type: "object", description: "TargetMetadata from the MetaEdit inspector. A region target has selectionType=region, a document-space region rectangle, and highlightedElements.", properties: { component: { type: "string" }, source: { type: "string" }, instanceId: { type: "string" }, selector: { type: "string" }, textSnapshot: { type: "string" }, styleSnapshot: { type: "object" }, selectionType: { type: "string", enum: ["element", "region"] }, region: { type: "object", properties: { top: { type: "number" }, left: { type: "number" }, width: { type: "number" }, height: { type: "number" } }, required: ["top", "left", "width", "height"], additionalProperties: false }, highlightedElements: { type: "array", items: { type: "object" } } }, required: ["component", "source", "instanceId", "selector", "textSnapshot", "styleSnapshot"], additionalProperties: false }, comment: { type: "string", minLength: 1 } }, required: ["target", "comment"], additionalProperties: false },
         annotations: { untrustedContentHint: true },
-        execute: (input, options) => call("create_annotation", input, options),
+        execute: (input, options) => {
+          const target = input.target as TargetMetadata;
+          const beforeScreenshot = target && typeof target === "object" ? captureMetaEditScreenshot(target) : null;
+          return call("create_annotation", beforeScreenshot ? { ...input, beforeScreenshot } : input, options);
+        },
       },
       {
         name: "metaedit_propose_revision",
-        description: "Propose a preview-only revision for one annotation. Allowed operations are replace_text, set_style with an allowlisted property, and set_visibility. Every operation must use the annotation selector. Never inject HTML, scripts, or CSS classes.",
+        description: "Propose a preview-only revision for one annotation. Allowed operations are replace_text, set_style with an allowlisted property, and set_visibility. Element annotations may edit their selector; freeform annotations may edit only selectors listed in highlightedElements. Never inject HTML, scripts, or CSS classes.",
         inputSchema: { type: "object", properties: { annotationId: { type: "string" }, instruction: { type: "string" }, baseVersion: { type: "integer" }, patch: { type: "array", minItems: 1, maxItems: 20, items: { type: "object" } } }, required: ["annotationId", "instruction", "baseVersion", "patch"], additionalProperties: false },
         annotations: { untrustedContentHint: true },
         execute: (input, options) => call("propose_revision", input, options),
@@ -91,10 +96,15 @@ export function WebMCPRegistry({ enabled, state, onState, onStatus }: { enabled:
       },
       {
         name: "metaedit_publish_revision",
-        description: "Publish an approved revision to the public page. Only the workspace owner can do this, and all active collaborators must have approved.",
+        description: "Publish an approved revision by opening a GitHub pull request with the structured patch and before/after evidence. Only the workspace owner can do this, and all active collaborators must have approved.",
         inputSchema: { type: "object", properties: { revisionId: { type: "string" } }, required: ["revisionId"], additionalProperties: false },
         annotations: { untrustedContentHint: true },
-        execute: (input, options) => call("publish_revision", input, options),
+        execute: (input, options) => {
+          const revision = currentState().revisions.find((item) => item.id === String(input.revisionId));
+          const annotation = revision?.annotationId ? currentState().annotations.find((item) => item.id === revision.annotationId) : undefined;
+          const afterScreenshot = annotation ? captureMetaEditScreenshot(annotationToScreenshotTarget(annotation)) : null;
+          return call("publish_revision", afterScreenshot ? { ...input, afterScreenshot } : input, options);
+        },
       },
       {
         name: "metaedit_focus_target",

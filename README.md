@@ -1,6 +1,6 @@
 # MetaEdit
 
-MetaEdit turns a website into a shared editing workspace. Visitors see the normal page. A collaborator opens the same page through the `metaedit.` subdomain, authenticates, clicks an element, and leaves a targeted change request. A WebMCP-capable browser agent can read that request and create a constrained preview. Collaborators review it together, then the workspace owner publishes it.
+MetaEdit turns a website into a shared editing workspace. Visitors see the normal page. A collaborator opens the same page through the `metaedit.` subdomain, authenticates, clicks an element, and leaves a targeted change request. A WebMCP-capable browser agent can read that request and create a constrained preview. Collaborators review it together, then the workspace owner opens a pull request from the same page.
 
 The product idea is simple: edit software from inside the software.
 
@@ -16,10 +16,12 @@ MetaEdit uses the browser's WebMCP API instead of a separate chat or proxy. Afte
 | `metaedit_create_annotation` | Save a comment against a stable page selector. |
 | `metaedit_propose_revision` | Save a preview-only text, style, or visibility patch for an annotation. |
 | `metaedit_review_revision` | Approve or reject a proposed revision. |
-| `metaedit_publish_revision` | Publish an approved revision. Owner access and active approvals are required. |
+| `metaedit_publish_revision` | Open a GitHub pull request for an approved revision. Owner access and active approvals are required. |
 | `metaedit_focus_target` | Scroll to and highlight the annotated element for the human collaborator. |
 
 The tools call the same application API used by the UI. Every mutating request carries an idempotency key. The server validates selectors and limits edits to an allowlist of safe operations. Annotation and revision text is marked as untrusted content for agents.
+
+Presence uses a Cloudflare Durable Object WebSocket room, with the authenticated HTTP heartbeat retained as a fallback. Cursor updates, collaborator joins, review events, and publish requests are reflected in the other collaborators' sessions.
 
 ## Run it locally
 
@@ -49,6 +51,10 @@ The demo workspace token is `WEBMCP` in both local development and the deployed 
 | --- | --- |
 | `METAEDIT_SESSION_TOKEN_HASH` | SHA-256 hex digest of the workspace token. The server compares it in constant time. |
 | `METAEDIT_COOKIE_SECRET` | Secret used to sign the HTTP-only session cookie. |
+| `GITHUB_TOKEN` | GitHub token with permission to create a branch, commit evidence, and open pull requests in the configured repository. Store it with `wrangler secret put`; never commit it. |
+| `GITHUB_OWNER` | Optional repository owner; defaults to `sin4ch`. |
+| `GITHUB_REPOSITORY` | Optional repository name; defaults to `MetaEdit`. |
+| `GITHUB_BASE_BRANCH` | Optional pull-request base branch; defaults to `main`. |
 
 Example hash generation:
 
@@ -66,17 +72,19 @@ The repository is configured for a Cloudflare Worker backed by D1:
 npm install
 npx wrangler secret put METAEDIT_SESSION_TOKEN_HASH
 npx wrangler secret put METAEDIT_COOKIE_SECRET
+npx wrangler secret put GITHUB_TOKEN
 npx @vinext/cloudflare@1.0.0-beta.3 deploy
 ```
 
-When prompted for `METAEDIT_SESSION_TOKEN_HASH`, enter the SHA-256 digest of `WEBMCP` (generate it with `printf 'WEBMCP' | sha256sum`). Use a long random value for `METAEDIT_COOKIE_SECRET`. The deployed Worker is served from its `*.workers.dev` URL unless a custom route is configured in Cloudflare.
+When prompted for `METAEDIT_SESSION_TOKEN_HASH`, enter the SHA-256 digest of `WEBMCP` (generate it with `printf 'WEBMCP' | sha256sum`). Use a long random value for `METAEDIT_COOKIE_SECRET`. `GITHUB_TOKEN` is used only server-side to create the review branch and pull request. The deployed Worker is served from its `*.workers.dev` URL unless a custom domain is configured in Cloudflare. This deployment is also attached to `https://metaedit.me.sin4.ch`.
 
 ## How the app is structured
 
 - `src/app/page.tsx` contains the visitor page and the authenticated editing surface.
 - `src/components/metaedit/GlobalInspector.tsx` collects stable selectors, text, and computed-style snapshots.
 - `src/components/metaedit/WebMCPRegistry.tsx` registers the page tools and unregisters them by aborting the registration signal, which follows the WebMCP API.
-- `src/app/api/metaedit/route.ts` authenticates collaborators and handles annotations, revisions, reviews, publishing, heartbeats, and logout.
+- `src/app/api/metaedit/route.ts` authenticates collaborators and handles annotations, revisions, reviews, GitHub-backed publishing, heartbeats, and logout.
+- `src/lib/server/github.ts` creates a review branch, applies an exact text replacement when the source snapshot is safely present, commits a revision manifest and cropped evidence, and opens the pull request.
 - `src/lib/metaedit-contract.ts` validates target metadata and the safe patch contract.
 - `src/lib/server/metaedit-db.ts` owns the D1 schema bootstrap and workspace reads.
 - `src/components/metaedit/PatchRuntime.tsx` applies previews or published patches in the page without injecting HTML or scripts.
@@ -101,8 +109,9 @@ Manual browser check:
 3. Click a visible element and save an annotation.
 4. Open **Activity** and confirm the author, comment, target, and selector are shown.
 5. In a WebMCP-capable browser agent, call `metaedit_list_annotations`, inspect the annotation, and propose a patch against its `selector` and `baseVersion`.
-6. Toggle the before/after view, approve the revision, and publish it as the workspace owner.
-7. Leave the workspace and confirm the visitor page shows only published changes.
+6. Toggle the before/after view, approve the revision, and choose **Publish** as the workspace owner.
+7. Confirm the warning, wait for the pull-request spinner to finish, and open the GitHub link shown on the activity entry.
+8. Leave the workspace and confirm the visitor page shows only the published preview.
 
 ## Challenge submission notes
 
@@ -112,7 +121,7 @@ The repository is the source of truth for the demo. The written story for the su
 
 Suggested testing credentials for the submission form are the display name `Alex Rivera` and the demo token `WEBMCP`.
 
-The remaining submission work is external to this repository: provide a working live URL, record a public video under three minutes with audio, complete the Devpost form, and verify the public repository from an incognito window. This repository includes the source, setup instructions, WebMCP tool list, and MIT license needed for that handoff.
+The remaining submission work is external to this repository: record a public video under three minutes with audio, complete the Devpost form, and verify the public repository from an incognito window. This repository includes the source, setup instructions, WebMCP tool list, pull-request workflow, and MIT license needed for that handoff. Use the checklist in [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md).
 
 The copy, testing notes, screenshot plan, and video outline are collected in [`devpost-submission.md`](devpost-submission.md). It is a local draft and does not submit anything to Devpost.
 

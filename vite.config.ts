@@ -17,6 +17,7 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         configPath: "./wrangler.jsonc",
+        config: { main: "./src/worker.ts" },
       }),
     ],
   };

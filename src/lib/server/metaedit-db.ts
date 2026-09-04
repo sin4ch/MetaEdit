@@ -10,9 +10,9 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS collaborators (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, platform_user_id TEXT, display_name TEXT NOT NULL, email TEXT, role TEXT NOT NULL, color TEXT NOT NULL, session_expires_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, cursor_x REAL, cursor_y REAL, created_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_collaborators_workspace_seen ON collaborators(workspace_id, last_seen_at)`,
   `CREATE INDEX IF NOT EXISTS idx_collaborators_platform_user ON collaborators(platform_user_id)`,
-  `CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, target_id TEXT NOT NULL, selector TEXT NOT NULL, component TEXT NOT NULL, source TEXT NOT NULL, text_snapshot TEXT NOT NULL, style_snapshot TEXT NOT NULL, selection_type TEXT NOT NULL DEFAULT 'element', region_json TEXT, highlighted_elements_json TEXT, comment TEXT NOT NULL, status TEXT NOT NULL, agent_state TEXT NOT NULL DEFAULT 'unseen', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, author_id TEXT NOT NULL, author_name TEXT NOT NULL, target_id TEXT NOT NULL, selector TEXT NOT NULL, component TEXT NOT NULL, source TEXT NOT NULL, text_snapshot TEXT NOT NULL, style_snapshot TEXT NOT NULL, selection_type TEXT NOT NULL DEFAULT 'element', region_json TEXT, highlighted_elements_json TEXT, comment TEXT NOT NULL, status TEXT NOT NULL, agent_state TEXT NOT NULL DEFAULT 'unseen', before_screenshot TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_annotations_workspace_created ON annotations(workspace_id, created_at)`,
-  `CREATE TABLE IF NOT EXISTS revisions (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, annotation_id TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, instruction TEXT NOT NULL, base_version INTEGER NOT NULL, version INTEGER NOT NULL, status TEXT NOT NULL, patch_json TEXT NOT NULL, before_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, published_at INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS revisions (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, annotation_id TEXT, author_id TEXT NOT NULL, author_name TEXT NOT NULL, instruction TEXT NOT NULL, base_version INTEGER NOT NULL, parent_revision_id TEXT, version INTEGER NOT NULL, status TEXT NOT NULL, patch_json TEXT NOT NULL, before_json TEXT NOT NULL, before_screenshot TEXT, after_screenshot TEXT, github_pr_url TEXT, github_pr_number INTEGER, github_commit_sha TEXT, publish_status TEXT NOT NULL DEFAULT 'idle', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, published_at INTEGER)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_workspace_version ON revisions(workspace_id, version)`,
   `CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, revision_id TEXT NOT NULL, collaborator_id TEXT NOT NULL, collaborator_name TEXT NOT NULL, decision TEXT NOT NULL, created_at INTEGER NOT NULL)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_approvals_revision_collaborator ON approvals(revision_id, collaborator_id)`,
@@ -28,6 +28,14 @@ const ANNOTATION_MIGRATIONS = [
   `ALTER TABLE annotations ADD COLUMN region_json TEXT`,
   `ALTER TABLE annotations ADD COLUMN highlighted_elements_json TEXT`,
   `ALTER TABLE annotations ADD COLUMN agent_state TEXT NOT NULL DEFAULT 'unseen'`,
+  `ALTER TABLE annotations ADD COLUMN before_screenshot TEXT`,
+  `ALTER TABLE revisions ADD COLUMN parent_revision_id TEXT`,
+  `ALTER TABLE revisions ADD COLUMN before_screenshot TEXT`,
+  `ALTER TABLE revisions ADD COLUMN after_screenshot TEXT`,
+  `ALTER TABLE revisions ADD COLUMN github_pr_url TEXT`,
+  `ALTER TABLE revisions ADD COLUMN github_pr_number INTEGER`,
+  `ALTER TABLE revisions ADD COLUMN github_commit_sha TEXT`,
+  `ALTER TABLE revisions ADD COLUMN publish_status TEXT NOT NULL DEFAULT 'idle'`,
 ];
 
 export async function ensureDatabase() {
@@ -65,7 +73,7 @@ export function mapAnnotation(row: Row): Annotation {
   const selectionType = row.selection_type === "region" ? "region" : "element";
   const rawAgentState = String(row.agent_state ?? "unseen");
   const agentState = ["unseen", "seen", "in_progress", "done"].includes(rawAgentState) ? rawAgentState as Annotation["agentState"] : "unseen";
-  return { id: String(row.id), authorId: String(row.author_id), authorName: String(row.author_name), authorColor: row.author_color ? String(row.author_color) : undefined, targetId: String(row.target_id), selector: String(row.selector), component: String(row.component), source: String(row.source), textSnapshot: String(row.text_snapshot), styleSnapshot: parseJson(row.style_snapshot, {}), selectionType, region: selectionType === "region" ? parseJson<MetaEditRect | null>(row.region_json, null) : null, highlightedElements: selectionType === "region" ? parseJson<HighlightedElement[]>(row.highlighted_elements_json, []) : [], agentState, comment: String(row.comment), status: String(row.status) as Annotation["status"], createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) };
+  return { id: String(row.id), authorId: String(row.author_id), authorName: String(row.author_name), authorColor: row.author_color ? String(row.author_color) : undefined, targetId: String(row.target_id), selector: String(row.selector), component: String(row.component), source: String(row.source), textSnapshot: String(row.text_snapshot), styleSnapshot: parseJson(row.style_snapshot, {}), selectionType, region: selectionType === "region" ? parseJson<MetaEditRect | null>(row.region_json, null) : null, highlightedElements: selectionType === "region" ? parseJson<HighlightedElement[]>(row.highlighted_elements_json, []) : [], agentState, beforeScreenshot: typeof row.before_screenshot === "string" ? row.before_screenshot : null, comment: String(row.comment), status: String(row.status) as Annotation["status"], createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) };
 }
 
 function mapApproval(row: Row): Approval {
@@ -73,7 +81,9 @@ function mapApproval(row: Row): Approval {
 }
 
 function mapRevision(row: Row, approvals: Approval[]): Revision {
-  return { id: String(row.id), annotationId: row.annotation_id ? String(row.annotation_id) : null, authorId: String(row.author_id), authorName: String(row.author_name), authorColor: row.author_color ? String(row.author_color) : undefined, instruction: String(row.instruction), baseVersion: Number(row.base_version), version: Number(row.version), status: String(row.status) as Revision["status"], patch: JSON.parse(String(row.patch_json)), before: JSON.parse(String(row.before_json)), approvals: approvals.filter((item) => item.revisionId === String(row.id)), createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), publishedAt: row.published_at ? iso(row.published_at) : null };
+  const rawPublishStatus = String(row.publish_status ?? "idle");
+  const publishStatus = ["idle", "creating", "ready", "failed"].includes(rawPublishStatus) ? rawPublishStatus as Revision["publishStatus"] : "idle";
+  return { id: String(row.id), annotationId: row.annotation_id ? String(row.annotation_id) : null, authorId: String(row.author_id), authorName: String(row.author_name), authorColor: row.author_color ? String(row.author_color) : undefined, instruction: String(row.instruction), baseVersion: Number(row.base_version), parentRevisionId: row.parent_revision_id ? String(row.parent_revision_id) : null, version: Number(row.version), status: String(row.status) as Revision["status"], patch: JSON.parse(String(row.patch_json)), before: JSON.parse(String(row.before_json)), approvals: approvals.filter((item) => item.revisionId === String(row.id)), createdAt: iso(row.created_at), updatedAt: iso(row.updated_at), publishedAt: row.published_at ? iso(row.published_at) : null, beforeScreenshot: typeof row.before_screenshot === "string" ? row.before_screenshot : null, afterScreenshot: typeof row.after_screenshot === "string" ? row.after_screenshot : null, githubPrUrl: typeof row.github_pr_url === "string" ? row.github_pr_url : null, githubPrNumber: row.github_pr_number === null || row.github_pr_number === undefined ? null : Number(row.github_pr_number), githubCommitSha: typeof row.github_commit_sha === "string" ? row.github_commit_sha : null, publishStatus };
 }
 
 export async function readWorkspaceState(currentCollaboratorId: string | null, publicOnly = false): Promise<WorkspaceState> {
