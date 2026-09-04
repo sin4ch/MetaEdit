@@ -224,6 +224,16 @@ export default function MetaEditPage() {
     );
   };
 
+  const handleEnterMetaEdit = () => {
+    if (isMetaEditMode) return;
+    const editorUrl = getEditorUrl(window.location.href);
+    if (editorUrl) {
+      window.location.replace(editorUrl);
+      return;
+    }
+    setAccessModalOpen(true);
+  };
+
   const requestExitMetaEdit = () => setExitConfirmOpen(true);
 
   const handleExitMetaEdit = async () => {
@@ -381,7 +391,7 @@ export default function MetaEditPage() {
             <Button
               size="sm"
               variant="primary"
-              onClick={() => setAccessModalOpen(true)}
+              onClick={handleEnterMetaEdit}
               className="shadow-sm"
             >
               <span>Enter MetaEdit</span>
@@ -465,7 +475,7 @@ export default function MetaEditPage() {
               variant="primary"
               onClick={() => {
                 setMobileMenuOpen(false);
-                setAccessModalOpen(true);
+                handleEnterMetaEdit();
               }}
               className="w-full h-12 text-base rounded-full justify-center shadow-sm"
             >
@@ -491,7 +501,7 @@ export default function MetaEditPage() {
             <div className="mt-8 flex items-center justify-center">
               <Button
                 variant="primary"
-                onClick={() => setAccessModalOpen(true)}
+                onClick={handleEnterMetaEdit}
                 className="h-[38px] px-4 text-base font-medium shadow-sm gap-2"
               >
                 <span>Get Started Free</span>
@@ -732,7 +742,7 @@ export default function MetaEditPage() {
               <Button
                 size="md"
                 variant="outline"
-                onClick={() => setAccessModalOpen(true)}
+                onClick={handleEnterMetaEdit}
                 className="w-full h-11 rounded-full text-sm font-medium bg-white border-[#191919]/10 hover:bg-[#f6f6f6] text-[#191919] shadow-sm cursor-pointer"
               >
                 Start Free
@@ -788,7 +798,7 @@ export default function MetaEditPage() {
                 <Button
                   size="md"
                   variant="primary"
-                  onClick={() => setAccessModalOpen(true)}
+                  onClick={handleEnterMetaEdit}
                   className="w-full h-11 rounded-full text-sm font-medium shadow-sm cursor-pointer"
                 >
                   Get Started with Teams
@@ -885,7 +895,7 @@ export default function MetaEditPage() {
 
             <Button
               variant="primary"
-              onClick={() => setAccessModalOpen(true)}
+              onClick={handleEnterMetaEdit}
               className="h-[38px] px-4 text-base font-medium shadow-sm gap-2"
             >
               <span>Get Started Free</span>
