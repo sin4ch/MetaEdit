@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "MetaEdit",
+  "revision": {
+    "id": "24c65ae1-807d-442c-a5ea-8d1f7f546e2c",
+    "version": 2,
+    "parentRevisionId": "35fd419a-3b31-4455-bef3-cca85cce1c2e",
+    "authorId": "86d90135-904d-48d7-b74c-2bbea1141dbc",
+    "authorName": "Osinachi Okpara",
+    "instruction": "Rewrite the selected section heading to make the product value clearer and more direct.",
+    "baseVersion": 1,
+    "status": "approved",
+    "patch": [
+      {
+        "op": "replace_text",
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2) > div:nth-of-type(1) > h2:nth-of-type(1)",
+        "value": "Edit your site where it lives"
+      }
+    ],
+    "before": [
+      {
+        "op": "replace_text",
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2) > div:nth-of-type(1) > h2:nth-of-type(1)",
+        "value": "How MetaEdit works"
+      }
+    ]
+  },
+  "annotation": {
+    "id": "cb86fc8d-4961-40f6-8064-8c4cb69b68ce",
+    "authorId": "ba831447-e22f-4e8f-9aa5-d4fc6824e199",
+    "authorName": "Enrique Gonzales",
+    "comment": "Rewrite this.",
+    "source": "viewport",
+    "selector": "body",
+    "component": "FreeformRegion",
+    "targetId": "region-207-1258-382-123-mtmgw8sh",
+    "textSnapshot": "PageSection: How MetaEdit worksNew Tab×←⟳🌐metaedit.example.comOpen the editorAdd metaedit. in front of your website link to begin.inside the software.ParagraphText#paragraphtext-303MetaEdit tu | SectionHeader: How MetaEdit works",
+    "selectionType": "region",
+    "region": {
+      "top": 1258.0234375,
+      "left": 207.25,
+      "width": 381.62890625,
+      "height": 122.5390625
+    },
+    "highlightedElements": [
+      {
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2)",
+        "component": "PageSection",
+        "instanceId": "workflow-section",
+        "tagName": "section",
+        "textSnapshot": "How MetaEdit worksNew Tab×←⟳🌐metaedit.example.comOpen the editorAdd metaedit. in front of your website link to begin.inside the software.ParagraphText#paragraphtext-303MetaEdit turns any live website into a collaborative development workspace...Click anythingClick any text, button, or section on your page.HeroHeadline#hero-titleMake headline shorter & boldYouCancelSaveSay what to changeType what you want changed and hit save.Proposed change- text-4xl leading-tight+ text-5xl font-boldShip it liveApproved revisions publish from the same workspace.",
+        "styleSnapshot": {
+          "color": "rgb(25, 25, 25)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "borderColor": "rgb(25, 25, 25)",
+          "borderRadius": "0px",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "letterSpacing": "normal",
+          "lineHeight": "24px",
+          "textAlign": "start",
+          "padding": "0px",
+          "margin": "0px",
+          "gap": "normal",
+          "width": "758px",
+          "maxWidth": "none",
+          "minHeight": "auto",
+          "opacity": "1"
+        },
+        "boundingRect": {
+          "top": 1302.5,
+          "left": 24,
+          "width": 758,
+          "height": 828
+        },
+        "intersectionRatio": 0.0474661684290923
+      },
+      {
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2) > div:nth-of-type(1) > h2:nth-of-type(1)",
+        "component": "SectionHeader",
+        "instanceId": "target-uiiqrd",
+        "tagName": "h2",
+        "textSnapshot": "How MetaEdit works",
+        "styleSnapshot": {
+          "color": "rgb(25, 25, 25)",
+          "backgroundColor": "rgba(0, 0, 0, 0)",
+          "borderColor": "rgb(25, 25, 25)",
+          "borderRadius": "0px",
+          "fontSize": "30px",
+          "fontWeight": "500",
+          "letterSpacing": "normal",
+          "lineHeight": "36px",
+          "textAlign": "center",
+          "padding": "0px",
+          "margin": "0px",
+          "gap": "normal",
+          "width": "758px",
+          "maxWidth": "none",
+          "minHeight": "0px",
+          "opacity": "1"
+        },
+        "boundingRect": {
+          "top": 1302.5,
+          "left": 24,
+          "width": 758,
+          "height": 36
+        },
+        "intersectionRatio": 0.503468214050132
+      }
+    ]
+  },
+  "screenshots": {
+    "before": ".metaedit/screenshots/24c65ae1-807d-442c-a5ea-8d1f7f546e2c-before.svg",
+    "after": ".metaedit/screenshots/24c65ae1-807d-442c-a5ea-8d1f7f546e2c-after.svg"
+  }
+}
