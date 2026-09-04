@@ -894,14 +894,38 @@ export default function MetaEditPage() {
       </main>
 
       {isMetaEditMode && !inspectTipDismissed && (
-        <div
-          data-metaedit-chrome="true"
-          className="pointer-events-auto fixed left-1/2 top-20 z-[70] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-[#191919]/10 bg-white px-3.5 py-2 text-xs text-[#505050] shadow-[0_8px_28px_rgba(0,0,0,0.12)]"
-          role="status"
-        >
-          <span>Click an element to annotate it, or drag over a section.</span>
-          <button type="button" onClick={() => setInspectTipDismissed(true)} className="shrink-0 rounded-full px-1.5 py-0.5 font-medium text-[#6e6e6e] transition hover:bg-[#f3f3f3] hover:text-[#191919]" aria-label="Dismiss editing tip">Got it</button>
-        </div>
+        <>
+          <div
+            data-metaedit-chrome="true"
+            className="pointer-events-auto fixed inset-0 z-[65] bg-[#111318]/80"
+            aria-hidden="true"
+          />
+          <div
+            data-metaedit-chrome="true"
+            className="pointer-events-none fixed inset-x-0 bottom-[6.25rem] z-[80] flex justify-center px-4 sm:bottom-[6.5rem]"
+          >
+            <div
+              className="pointer-events-auto relative w-full max-w-2xl overflow-visible rounded-[2rem] border border-[#191919]/10 bg-white px-6 py-6 text-center text-[#191919] shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:px-10 sm:py-8"
+              role="status"
+            >
+              <p className="text-lg font-medium leading-snug sm:text-2xl">
+                Click an element to annotate it, or drag over a section.
+              </p>
+              <button
+                type="button"
+                onClick={() => setInspectTipDismissed(true)}
+                className="mt-5 rounded-full bg-[#191919] px-5 py-2 text-sm font-medium text-white transition hover:bg-[#303030] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/50 focus-visible:ring-offset-2"
+                aria-label="Dismiss editing tip"
+              >
+                Got it
+              </button>
+              <span
+                aria-hidden="true"
+                className="absolute -bottom-2 left-1/2 size-4 -translate-x-1/2 rotate-45 border-b border-r border-[#191919]/10 bg-white"
+              />
+            </div>
+          </div>
+        </>
       )}
 
       {/* Access Token Gate Modal */}
