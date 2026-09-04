@@ -205,6 +205,12 @@ export default function MetaEditPage() {
   }, [addToast, isMetaEditMode, workspaceState]);
 
   const handleAuthorizeSession = ({ session, state }: { session: MetaEditSession; state: WorkspaceState }) => {
+    const editorUrl = getEditorUrl(window.location.href);
+    if (editorUrl) {
+      window.location.replace(editorUrl);
+      return;
+    }
+
     setWorkspaceState(state);
     setIsMetaEditMode(true);
     setAccessModalOpen(false);
@@ -1011,4 +1017,14 @@ function getVisitorUrl(currentHref: string): string | null {
     changed = true;
   }
   return changed ? url.toString() : null;
+}
+
+function getEditorUrl(currentHref: string): string | null {
+  const url = new URL(currentHref);
+  if (url.hostname.startsWith("metaedit.")) return null;
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]") return null;
+
+  url.hostname = `metaedit.${url.hostname}`;
+  url.searchParams.delete("metaedit");
+  return url.toString();
 }

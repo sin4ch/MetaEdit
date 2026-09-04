@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       const { collaborator, expiresAt } = await createCollaborator(request, displayName);
       await recordActivity("collaborator.joined", collaborator, collaborator.id, `${collaborator.displayName} joined the workspace.`);
       const response = NextResponse.json({ session: { collaborator, workspaceId: WORKSPACE_ID, workspaceName: "MetaEdit", expiresAt: new Date(expiresAt).toISOString() }, state: await readWorkspaceState(collaborator.id) });
-      response.cookies.set(sessionCookie.name, await createSessionCookie(collaborator.id, expiresAt), { httpOnly: true, sameSite: "lax", secure: new URL(request.url).protocol === "https:", path: "/", maxAge: sessionCookie.maxAge });
+      response.cookies.set(sessionCookie.name, await createSessionCookie(collaborator.id, expiresAt), { ...sessionCookieOptions(request), maxAge: sessionCookie.maxAge });
       return response;
     }
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       const collaborator = await readSession(request);
       if (collaborator) await getD1().prepare(`UPDATE collaborators SET last_seen_at = ?, cursor_x = NULL, cursor_y = NULL WHERE id = ?`).bind(0, collaborator.id).run();
       const response = NextResponse.json({ ok: true });
-      response.cookies.set(sessionCookie.name, "", { httpOnly: true, sameSite: "lax", secure: new URL(request.url).protocol === "https:", path: "/", maxAge: 0 });
+      response.cookies.set(sessionCookie.name, "", { ...sessionCookieOptions(request), maxAge: 0 });
       return response;
     }
 
@@ -208,4 +208,17 @@ function readCursor(value: unknown): { x: number; y: number } | null | undefined
   if (typeof x !== "number" || !Number.isFinite(x) || x < -100000 || x > 100000) throw new Error("cursor.x must be a finite viewport coordinate.");
   if (typeof y !== "number" || !Number.isFinite(y) || y < -100000 || y > 100000) throw new Error("cursor.y must be a finite viewport coordinate.");
   return { x, y };
+}
+
+function sessionCookieOptions(request: Request) {
+  const url = new URL(request.url);
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const domain = hostname === "me.sin4.ch" || hostname.endsWith(".me.sin4.ch") ? "me.sin4.ch" : undefined;
+  return {
+    domain,
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: url.protocol === "https:",
+    path: "/",
+  };
 }
