@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { asRecord, captureBeforeOperations, readString, validatePatchOperations, validateScreenshot, validateTarget } from "@/lib/metaedit-contract";
 import { createCollaborator, createSessionCookie, readSession, requireSession, sessionCookie, verifyAccessToken } from "@/lib/server/metaedit-auth";
-import { ensureDatabase, getAnnotation, getRevision, idempotent, readWorkspaceState, recordActivity, WORKSPACE_ID } from "@/lib/server/metaedit-db";
+import { ACTIVE_WINDOW_MS, ensureDatabase, getAnnotation, getRevision, idempotent, readWorkspaceState, recordActivity, WORKSPACE_ID } from "@/lib/server/metaedit-db";
 import { createRevisionPullRequest } from "@/lib/server/github";
 import { getD1 } from "../../../../db";
 
@@ -125,7 +125,7 @@ export async function POST(request: Request) {
       const now = Date.now();
       await idempotent(key, async () => {
         await getD1().prepare(`INSERT INTO approvals (id, revision_id, collaborator_id, collaborator_name, decision, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(revision_id, collaborator_id) DO UPDATE SET decision = excluded.decision, collaborator_name = excluded.collaborator_name, created_at = excluded.created_at`).bind(crypto.randomUUID(), revisionId, collaborator.id, collaborator.displayName, decision, now).run();
-        const active = await getD1().prepare(`SELECT COUNT(*) AS count FROM collaborators WHERE workspace_id = ? AND last_seen_at >= ?`).bind(WORKSPACE_ID, now - 10 * 60 * 1000).first<{ count: number }>();
+        const active = await getD1().prepare(`SELECT COUNT(*) AS count FROM collaborators WHERE workspace_id = ? AND last_seen_at >= ?`).bind(WORKSPACE_ID, now - ACTIVE_WINDOW_MS).first<{ count: number }>();
         const reviews = await getD1().prepare(`SELECT decision, COUNT(*) AS count FROM approvals WHERE revision_id = ? GROUP BY decision`).bind(revisionId).all<{ decision: string; count: number }>();
         const rejected = reviews.results.some((row) => row.decision === "rejected" && Number(row.count) > 0);
         const approvedCount = Number(reviews.results.find((row) => row.decision === "approved")?.count ?? 0);
@@ -205,8 +205,8 @@ function readCursor(value: unknown): { x: number; y: number } | null | undefined
   const cursor = asRecord(value);
   const x = cursor.x;
   const y = cursor.y;
-  if (typeof x !== "number" || !Number.isFinite(x) || x < -100000 || x > 100000) throw new Error("cursor.x must be a finite viewport coordinate.");
-  if (typeof y !== "number" || !Number.isFinite(y) || y < -100000 || y > 100000) throw new Error("cursor.y must be a finite viewport coordinate.");
+  if (typeof x !== "number" || !Number.isFinite(x) || x < -1000000 || x > 1000000) throw new Error("cursor.x must be a finite document coordinate.");
+  if (typeof y !== "number" || !Number.isFinite(y) || y < -1000000 || y > 1000000) throw new Error("cursor.y must be a finite document coordinate.");
   return { x, y };
 }
 

@@ -44,6 +44,7 @@ export default function MetaEditPage() {
   const activityButtonRef = React.useRef<HTMLButtonElement>(null);
   const cursorRef = React.useRef<{ x: number; y: number } | null>(null);
   const presenceSocketRef = React.useRef<WebSocket | null>(null);
+  const departedCollaboratorIdsRef = React.useRef<Set<string>>(new Set());
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const seenActivityIdsRef = React.useRef<Set<string>>(new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -75,6 +76,7 @@ export default function MetaEditPage() {
 
   React.useEffect(() => {
     if (!isMetaEditMode) return;
+    departedCollaboratorIdsRef.current.clear();
     let requestInFlight = false;
     let socket: WebSocket | null = null;
     let sendFrame: number | null = null;
@@ -91,6 +93,7 @@ export default function MetaEditPage() {
         const byId = new Map(previous.collaborators.map((item) => [item.id, item]));
         const upsert = (item: { collaboratorId: string; displayName: string; color: string; cursor: { x: number; y: number } | null }) => {
           if (!item.collaboratorId || item.collaboratorId === currentId) return;
+          departedCollaboratorIdsRef.current.delete(item.collaboratorId);
           const existing = byId.get(item.collaboratorId);
           byId.set(item.collaboratorId, {
             id: item.collaboratorId,
@@ -108,11 +111,11 @@ export default function MetaEditPage() {
           if (payload.collaborator) upsert(payload.collaborator);
         }
         if (payload.type === "presence.left" && payload.collaboratorId) {
-          const existing = byId.get(payload.collaboratorId);
-          if (existing) byId.set(payload.collaboratorId, { ...existing, cursor: undefined, lastSeenAt: new Date(0).toISOString() });
+          departedCollaboratorIdsRef.current.add(payload.collaboratorId);
+          byId.delete(payload.collaboratorId);
         }
 
-        return { ...previous, collaborators: Array.from(byId.values()).filter((item) => item.id === currentId || item.lastSeenAt !== new Date(0).toISOString()) };
+        return { ...previous, collaborators: Array.from(byId.values()).filter((item) => !departedCollaboratorIdsRef.current.has(item.id)) };
       });
     };
 
@@ -131,12 +134,15 @@ export default function MetaEditPage() {
       requestInFlight = true;
       const cursor = cursorRef.current;
       metaEditRequest<{ state: WorkspaceState }>("heartbeat", { cursor })
-        .then((response) => setWorkspaceState(response.state))
+        .then((response) => setWorkspaceState(() => ({
+          ...response.state,
+          collaborators: response.state.collaborators.filter((item) => !departedCollaboratorIdsRef.current.has(item.id)),
+        })))
         .catch(() => undefined)
         .finally(() => { requestInFlight = false; });
     };
     const updateCursor = (event: PointerEvent) => {
-      cursorRef.current = { x: event.clientX, y: event.clientY };
+      cursorRef.current = { x: event.clientX + window.scrollX, y: event.clientY + window.scrollY };
       sendCursorSoon();
     };
     const clearCursor = () => {
@@ -165,6 +171,12 @@ export default function MetaEditPage() {
     window.addEventListener("pointerleave", clearCursor, { passive: true });
     window.addEventListener("blur", clearCursor, { passive: true });
     document.addEventListener("visibilitychange", clearCursor);
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted || !navigator.sendBeacon) return;
+      const body = new Blob([JSON.stringify({ action: "logout" })], { type: "application/json" });
+      navigator.sendBeacon("/api/metaedit", body);
+    };
+    window.addEventListener("pagehide", handlePageHide);
     const interval = window.setInterval(refresh, 750);
     refresh();
     return () => {
@@ -172,6 +184,7 @@ export default function MetaEditPage() {
       window.removeEventListener("pointermove", updateCursor);
       window.removeEventListener("pointerleave", clearCursor);
       window.removeEventListener("blur", clearCursor);
+      window.removeEventListener("pagehide", handlePageHide);
       document.removeEventListener("visibilitychange", clearCursor);
       if (sendFrame !== null) window.cancelAnimationFrame(sendFrame);
       if (socket?.readyState === WebSocket.OPEN) {
@@ -238,12 +251,12 @@ export default function MetaEditPage() {
 
   const handleExitMetaEdit = async () => {
     setExitConfirmOpen(false);
-    await metaEditRequest("logout").catch(() => undefined);
     setIsMetaEditMode(false);
     setSelectedTarget(null);
     setIsInspecting(false);
     setActivityOpen(false);
     setComparison(null);
+    await metaEditRequest("logout").catch(() => undefined);
     const visitorUrl = getVisitorUrl(window.location.href);
     if (visitorUrl) {
       window.location.replace(visitorUrl);

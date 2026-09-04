@@ -2,7 +2,7 @@ import { getD1 } from "../../../db";
 import type { Annotation, Approval, Collaborator, HighlightedElement, MetaEditRect, Revision, WorkspaceState } from "@/types/metaedit";
 
 export const WORKSPACE_ID = "default";
-const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
+export const ACTIVE_WINDOW_MS = 45 * 1000;
 let initialized: Promise<void> | null = null;
 
 const SCHEMA = [

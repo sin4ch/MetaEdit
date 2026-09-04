@@ -11,16 +11,30 @@ interface PresenceOverlayProps {
 
 export function PresenceOverlay({ collaborators, currentUserId }: PresenceOverlayProps) {
   const remoteCollaborators = collaborators.filter((c) => c.id !== currentUserId && c.cursor);
+  const [scrollOffset, setScrollOffset] = React.useState({ x: 0, y: 0 });
+
+  React.useEffect(() => {
+    const syncScrollOffset = () => setScrollOffset({ x: window.scrollX, y: window.scrollY });
+    syncScrollOffset();
+    window.addEventListener("scroll", syncScrollOffset, { passive: true });
+    window.addEventListener("resize", syncScrollOffset);
+    return () => {
+      window.removeEventListener("scroll", syncScrollOffset);
+      window.removeEventListener("resize", syncScrollOffset);
+    };
+  }, []);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
       {remoteCollaborators.map((collaborator) => {
         if (!collaborator.cursor) return null;
+        const viewportX = collaborator.cursor.x - scrollOffset.x;
+        const viewportY = collaborator.cursor.y - scrollOffset.y;
         return (
           <motion.div
             key={collaborator.id}
-            initial={{ opacity: 0, x: collaborator.cursor.x, y: collaborator.cursor.y }}
-            animate={{ opacity: 1, x: collaborator.cursor.x, y: collaborator.cursor.y }}
+            initial={{ opacity: 0, x: viewportX, y: viewportY }}
+            animate={{ opacity: 1, x: viewportX, y: viewportY }}
             transition={{ type: "spring", damping: 30, stiffness: 200 }}
             className="absolute top-0 left-0 flex items-start gap-1"
           >

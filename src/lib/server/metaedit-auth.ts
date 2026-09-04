@@ -1,5 +1,5 @@
 import { getRuntimeSecret } from "../../../db";
-import { ensureDatabase, mapCollaborator, WORKSPACE_ID } from "./metaedit-db";
+import { ACTIVE_WINDOW_MS, ensureDatabase, mapCollaborator, WORKSPACE_ID } from "./metaedit-db";
 import { getD1 } from "../../../db";
 import type { Collaborator } from "@/types/metaedit";
 
@@ -61,24 +61,52 @@ export async function createCollaborator(request: Request, displayName: string) 
   const email = request.headers.get("oai-authenticated-user-email");
   const encodedName = request.headers.get("oai-authenticated-user-full-name");
   const platformName = encodedName ? safeDecode(encodedName) : null;
-  const existing = platformUserId ? await d1.prepare(`SELECT * FROM collaborators WHERE platform_user_id = ? AND workspace_id = ?`).bind(platformUserId, WORKSPACE_ID).first<Record<string, unknown>>() : null;
   const now = Date.now();
   const expiresAt = now + SESSION_MS;
+  const existing = platformUserId ? await d1.prepare(`SELECT * FROM collaborators WHERE platform_user_id = ? AND workspace_id = ?`).bind(platformUserId, WORKSPACE_ID).first<Record<string, unknown>>() : null;
+  const activeColorRows = await d1.prepare(`SELECT id, color FROM collaborators WHERE workspace_id = ? AND last_seen_at >= ?`).bind(WORKSPACE_ID, now - ACTIVE_WINDOW_MS).all<{ id: string; color: string }>();
+  const activeColors = new Set(activeColorRows.results.map((row) => normalizeColor(row.color)).filter((color): color is string => Boolean(color)));
   if (existing) {
-    await d1.prepare(`UPDATE collaborators SET display_name = ?, email = ?, session_expires_at = ?, last_seen_at = ?, cursor_x = NULL, cursor_y = NULL WHERE id = ?`).bind(platformName ?? displayName, email, expiresAt, now, existing.id).run();
-    return { collaborator: { ...mapCollaborator(existing), displayName: platformName ?? displayName, email, lastSeenAt: new Date(now).toISOString() }, expiresAt };
+    const existingColor = normalizeColor(existing.color);
+    const hasColorConflict = existingColor ? activeColorRows.results.some((row) => String(row.id) !== String(existing.id) && normalizeColor(row.color) === existingColor) : true;
+    const color = existingColor && !hasColorConflict ? existingColor : randomAvailableColor(activeColors);
+    await d1.prepare(`UPDATE collaborators SET display_name = ?, email = ?, color = ?, session_expires_at = ?, last_seen_at = ?, cursor_x = NULL, cursor_y = NULL WHERE id = ?`).bind(platformName ?? displayName, email, color, expiresAt, now, existing.id).run();
+    return { collaborator: { ...mapCollaborator(existing), displayName: platformName ?? displayName, email, color, lastSeenAt: new Date(now).toISOString() }, expiresAt };
   }
   const count = await d1.prepare(`SELECT COUNT(*) AS count FROM collaborators WHERE workspace_id = ?`).bind(WORKSPACE_ID).first<{ count: number }>();
-  const collaborator: Collaborator = { id: crypto.randomUUID(), displayName: platformName ?? displayName, email, role: Number(count?.count ?? 0) === 0 ? "owner" : "editor", color: collaboratorColor(platformUserId ?? displayName), lastSeenAt: new Date(now).toISOString() };
+  const collaborator: Collaborator = { id: crypto.randomUUID(), displayName: platformName ?? displayName, email, role: Number(count?.count ?? 0) === 0 ? "owner" : "editor", color: randomAvailableColor(activeColors), lastSeenAt: new Date(now).toISOString() };
   await d1.prepare(`INSERT INTO collaborators (id, workspace_id, platform_user_id, display_name, email, role, color, session_expires_at, last_seen_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(collaborator.id, WORKSPACE_ID, platformUserId, collaborator.displayName, email, collaborator.role, collaborator.color, expiresAt, now, now).run();
   return { collaborator, expiresAt };
 }
 
-function collaboratorColor(seed: string) {
-  const colors = ["#305dde", "#8b5cf6", "#0f9f75", "#e05275", "#d97706", "#0891b2"];
-  let hash = 0;
-  for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) | 0;
-  return colors[Math.abs(hash) % colors.length];
+const COLLABORATOR_COLORS = [
+  "#305dde", "#e05275", "#0f9f75", "#d97706", "#8b5cf6", "#0891b2",
+  "#db2777", "#65a30d", "#9333ea", "#0284c7", "#ea580c", "#0d9488",
+  "#dc2626", "#4f46e5", "#ca8a04", "#be123c", "#15803d", "#7c3aed",
+];
+
+function normalizeColor(value: unknown) {
+  if (typeof value !== "string" || !/^#[\da-f]{6}$/i.test(value)) return null;
+  return value.toLowerCase();
+}
+
+function randomAvailableColor(usedColors: Set<string>) {
+  const available = COLLABORATOR_COLORS.filter((color) => !usedColors.has(color));
+  if (available.length > 0) return available[randomIndex(available.length)];
+
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const bytes = new Uint8Array(3);
+    crypto.getRandomValues(bytes);
+    const color = `#${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    if (!usedColors.has(color)) return color;
+  }
+  return `#${crypto.randomUUID().replaceAll("-", "").slice(0, 6)}`;
+}
+
+function randomIndex(length: number) {
+  const value = new Uint32Array(1);
+  crypto.getRandomValues(value);
+  return value[0] % length;
 }
 function safeDecode(value: string) { try { return decodeURIComponent(value); } catch { return null; } }
 

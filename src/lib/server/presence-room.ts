@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { getD1 } from "../../../db";
+import { WORKSPACE_ID } from "./metaedit-db";
 
 interface PresenceAttachment {
   collaboratorId: string;
@@ -14,7 +16,7 @@ interface PresenceMessage {
   collaboratorId?: string;
 }
 
-const MAX_COORDINATE = 100000;
+const MAX_COORDINATE = 1000000;
 
 /**
  * One hibernatable WebSocket room for the MetaEdit workspace.
@@ -68,15 +70,24 @@ export class PresenceRoom extends DurableObject {
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string) {
-    const attachment = this.attachmentFor(ws);
-    if (attachment) this.broadcast({ type: "presence.left", collaboratorId: attachment.collaboratorId }, ws);
+    await this.handleDisconnect(ws);
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
 
   async webSocketError(ws: WebSocket) {
-    const attachment = this.attachmentFor(ws);
-    if (attachment) this.broadcast({ type: "presence.left", collaboratorId: attachment.collaboratorId }, ws);
+    await this.handleDisconnect(ws);
     try { ws.close(1011, "Presence connection failed."); } catch { /* already closed */ }
+  }
+
+  private async handleDisconnect(ws: WebSocket) {
+    const attachment = this.attachmentFor(ws);
+    if (!attachment) return;
+    const hasOtherConnection = this.ctx.getWebSockets().some((socket) => socket !== ws && this.attachmentFor(socket)?.collaboratorId === attachment.collaboratorId);
+    if (hasOtherConnection) return;
+    try {
+      await getD1().prepare(`UPDATE collaborators SET last_seen_at = 0, cursor_x = NULL, cursor_y = NULL WHERE workspace_id = ? AND id = ?`).bind(WORKSPACE_ID, attachment.collaboratorId).run();
+    } catch { /* presence remains useful if the durable store is briefly unavailable */ }
+    this.broadcast({ type: "presence.left", collaboratorId: attachment.collaboratorId }, ws);
   }
 
   private attachmentFor(ws: WebSocket): PresenceAttachment | null {
