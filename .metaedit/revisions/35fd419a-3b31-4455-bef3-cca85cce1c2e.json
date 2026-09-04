@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "MetaEdit",
+  "revision": {
+    "id": "35fd419a-3b31-4455-bef3-cca85cce1c2e",
+    "version": 1,
+    "parentRevisionId": null,
+    "authorId": "07d7a683-8f86-48c8-bc48-9f9b8bf68aa6",
+    "authorName": "Osinachi Okpara",
+    "instruction": "Change this to just \"FAQ\"",
+    "baseVersion": 0,
+    "status": "approved",
+    "patch": [
+      {
+        "op": "replace_text",
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > h2:nth-of-type(1)",
+        "value": "FAQ"
+      }
+    ],
+    "before": [
+      {
+        "op": "replace_text",
+        "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > h2:nth-of-type(1)",
+        "value": "Fair questions, straight answers."
+      }
+    ]
+  },
+  "annotation": {
+    "id": "38f4167e-3cc2-4819-ac0f-a6a8a549c859",
+    "authorId": "07d7a683-8f86-48c8-bc48-9f9b8bf68aa6",
+    "authorName": "Osinachi Okpara",
+    "comment": "Change this to just \"FAQ\"",
+    "source": "src/app/page.tsx",
+    "selector": "div:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(4) > h2:nth-of-type(1)",
+    "component": "SectionHeader",
+    "targetId": "target-ailxt9",
+    "textSnapshot": "Fair questions, straight answers.",
+    "selectionType": "element",
+    "region": null,
+    "highlightedElements": []
+  },
+  "screenshots": {
+    "before": ".metaedit/screenshots/35fd419a-3b31-4455-bef3-cca85cce1c2e-before.svg",
+    "after": ".metaedit/screenshots/35fd419a-3b31-4455-bef3-cca85cce1c2e-after.svg"
+  }
+}
