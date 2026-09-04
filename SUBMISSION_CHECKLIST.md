@@ -11,12 +11,12 @@
 - [x] Live collaborator cursors over a Cloudflare Durable Object WebSocket, with an HTTP heartbeat fallback.
 - [x] Owner confirmation before publishing, publish activity notification, spinner/completion state, and a pull-request link.
 - [x] GitHub branch/commit/PR integration with a revision manifest and cropped before/after evidence when available.
-- [x] Cloudflare Worker + D1 deployment and custom hostname: <https://metaedit.me.sin4.ch>.
+- [x] Cloudflare Worker + D1 deployment and custom hostnames: visitor page at <https://me.sin4.ch> and editor at <https://metaedit.me.sin4.ch>.
 
 ## Verify immediately before submitting
 
 - [ ] Open the custom URL in an incognito window and confirm the visitor page has no MetaEdit controls.
-- [ ] Open `https://metaedit.me.sin4.ch/?metaedit=1`, enter any display name, choose **Use demo token**, and use `WEBMCP` if needed.
+- [ ] Open <https://me.sin4.ch> to verify visitor mode, then open <https://metaedit.me.sin4.ch>, enter any display name, choose **Use demo token**, and use `WEBMCP` if needed.
 - [ ] In a WebMCP-enabled Chrome/Codex browser, call `metaedit_list_annotations`, inspect one annotation, and propose a text/style patch.
 - [ ] Open a second browser session and confirm both sessions see collaborator names and live cursor movement.
 - [ ] Approve the revision from every active collaborator; confirm Publish is disabled until the approval requirement is met.

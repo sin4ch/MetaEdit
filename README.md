@@ -76,7 +76,7 @@ npx wrangler secret put GITHUB_TOKEN
 npx @vinext/cloudflare@1.0.0-beta.3 deploy
 ```
 
-When prompted for `METAEDIT_SESSION_TOKEN_HASH`, enter the SHA-256 digest of `WEBMCP` (generate it with `printf 'WEBMCP' | sha256sum`). Use a long random value for `METAEDIT_COOKIE_SECRET`. `GITHUB_TOKEN` is used only server-side to create the review branch and pull request. The deployed Worker is served from its `*.workers.dev` URL unless a custom domain is configured in Cloudflare. This deployment is also attached to `https://metaedit.me.sin4.ch`.
+When prompted for `METAEDIT_SESSION_TOKEN_HASH`, enter the SHA-256 digest of `WEBMCP` (generate it with `printf 'WEBMCP' | sha256sum`). Use a long random value for `METAEDIT_COOKIE_SECRET`. `GITHUB_TOKEN` is used only server-side to create the review branch and pull request. The deployed Worker is served from its `*.workers.dev` URL unless a custom domain is configured in Cloudflare. This deployment serves the normal visitor page at `https://me.sin4.ch` and the authenticated editor at `https://metaedit.me.sin4.ch`.
 
 ## How the app is structured
 

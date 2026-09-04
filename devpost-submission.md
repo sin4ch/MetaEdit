@@ -71,7 +71,8 @@ npx vinext check
 
 ## Public Demo Link
 
-https://metaedit.me.sin4.ch
+Visitor page: https://me.sin4.ch<br>
+MetaEdit editor: https://metaedit.me.sin4.ch
 
 ## Public Repository Link
 
@@ -105,7 +106,7 @@ Suggested sequence:
 - [x] Source pushed to the public `sin4ch/MetaEdit` repository.
 - [x] Local sign-in tested after restarting Vinext with a reachable hostname.
 - [x] WebMCP cleanup crash fixed and authenticated page re-tested with no browser errors.
-- [x] Cloudflare zone activated and `metaedit.me.sin4.ch` attached to the Worker (certificate propagation may take a few minutes).
+- [x] Cloudflare zone activated; `me.sin4.ch` serves the visitor page and `metaedit.me.sin4.ch` opens the editor (certificate propagation may take a few minutes).
 - [x] Add the live URL.
 - [ ] Record and publish the demo video.
 - [ ] Complete account-specific Devpost fields and submit the form.
@@ -127,7 +128,7 @@ Fill these in on Devpost after choosing the final live URL and testing client:
 - Country of residence: TODO
 - App status: TODO
 - Existing-app update explanation, if applicable: TODO
-- Live URL: https://metaedit.me.sin4.ch (Cloudflare Worker; `https://metaedit.okparaosi17.workers.dev` is the fallback)
+- Live URL: https://me.sin4.ch (visitor page); add `metaedit.` for the editor at https://metaedit.me.sin4.ch. `https://metaedit.okparaosi17.workers.dev` is the fallback.
 - Testing instructions and credentials: any display name / `WEBMCP` for the deployed demo
 - Public code repository: https://github.com/sin4ch/MetaEdit
 - Agents or clients tested with WebMCP tools: WebMCP-enabled Chrome (verify the final browser build before submitting)
