@@ -96,7 +96,7 @@ export function WebMCPRegistry({ enabled, state, onState, onStatus }: { enabled:
       },
       {
         name: "metaedit_publish_revision",
-        description: "Publish an approved revision by opening a GitHub pull request with the structured patch and before/after evidence. Only the workspace owner can do this, and all active collaborators must have approved.",
+        description: "Publish a revision after at least one collaborator approves by opening a GitHub pull request with the structured patch and before/after evidence.",
         inputSchema: { type: "object", properties: { revisionId: { type: "string" } }, required: ["revisionId"], additionalProperties: false },
         annotations: { untrustedContentHint: true },
         execute: (input, options) => {

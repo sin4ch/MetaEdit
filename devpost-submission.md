@@ -12,7 +12,7 @@ People usually leave the page they are reviewing, describe a change in chat, and
 
 ## Solution
 
-MetaEdit adds an editing surface to the same website through the `metaedit.` subdomain. An authenticated collaborator clicks an element, sees its stable selector and style snapshot, and leaves a comment. A WebMCP-capable browser agent can read the annotation, inspect the current workspace version, and propose a constrained text, style, or visibility patch. The patch stays in preview until collaborators approve it. The workspace owner confirms publication from the page, which creates a GitHub branch, commits the structured revision plus cropped before/after evidence, and opens a pull request.
+MetaEdit adds an editing surface to the same website through the `metaedit.` subdomain. An authenticated collaborator clicks an element, sees its stable selector and style snapshot, and leaves a comment. A WebMCP-capable browser agent can read the annotation, inspect the current workspace version, and propose a constrained text, style, or visibility patch. The patch stays in preview until a collaborator approves it. An authenticated collaborator confirms publication from the page, which creates a GitHub branch, commits the structured revision plus cropped before/after evidence, and opens a pull request.
 
 ## Why This Matters
 
@@ -34,13 +34,13 @@ Codex helped shape the WebMCP contract, implement the D1-backed workspace API, b
 - WebMCP tools for reading context, creating annotations, proposing patches, reviewing, publishing, and focusing targets.
 - Safe patch allowlist for text, selected CSS properties, and visibility. No HTML, scripts, or arbitrary selectors.
 - Preview and published states with before/after inspection.
-- Owner-only publishing after active collaborators approve.
+- Publishing after at least one collaborator approves.
 - D1-compatible durable workspace state with idempotent mutations.
 - Untrusted-content hints on tool responses that contain user-authored text.
 
 ## Architecture
 
-The React page renders both visitor and authenticated editor modes. `GlobalInspector` collects target metadata. `WebMCPRegistry` registers the browser tools after authentication and keeps current state in refs so tool calls do not require re-registration. `/api/metaedit` validates every mutation, writes to D1, records activity, and returns the new workspace state. `PatchRuntime` applies preview or published operations in the DOM. `github.ts` creates the review branch and pull request when the owner confirms publication.
+The React page renders both visitor and authenticated editor modes. `GlobalInspector` collects target metadata. `WebMCPRegistry` registers the browser tools after authentication and keeps current state in refs so tool calls do not require re-registration. `/api/metaedit` validates every mutation, writes to D1, records activity, and returns the new workspace state. `PatchRuntime` applies preview or published operations in the DOM. `github.ts` creates the review branch and pull request when an authenticated collaborator confirms publication.
 
 ## Testing Instructions
 
@@ -57,7 +57,7 @@ For a WebMCP-capable browser agent:
 2. Call `metaedit_list_annotations`.
 3. Call `metaedit_inspect_annotation` for the selected annotation.
 4. Propose a patch using the annotation selector and current workspace version.
-5. Review the revision, inspect before/after, and choose **Publish** as the owner.
+5. Review the revision, inspect before/after, approve it, and choose **Publish** after one approval.
 6. Confirm the warning, wait for the spinner, then open the generated pull request and its screenshot evidence.
 
 Automated checks used for this draft:
@@ -88,7 +88,7 @@ Suggested sequence:
 2. Enter MetaEdit with `WEBMCP`.
 3. Click a card and save an attributed annotation.
 4. Ask a WebMCP-capable browser agent to inspect it and propose a text or style patch.
-5. Show the activity entry, before/after view, approval, and owner-only publish step.
+5. Show the activity entry, before/after view, approval, and publish step.
 6. Leave MetaEdit and show the published result in visitor mode.
 
 ## Screenshot Shot List

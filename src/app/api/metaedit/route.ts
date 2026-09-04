@@ -142,11 +142,12 @@ export async function POST(request: Request) {
     }
 
     if (action === "request_publish") {
-      if (collaborator.role !== "owner") return NextResponse.json({ error: "Only the workspace owner can request publishing." }, { status: 403 });
       const revisionId = readString(body, "revisionId", { max: 120 })!;
       const revision = await getRevision(revisionId);
       if (!revision) return NextResponse.json({ error: "Revision not found." }, { status: 404 });
-      if (revision.status !== "approved") return NextResponse.json({ error: "The revision must be approved before publishing." }, { status: 409 });
+      if (revision.status === "published") return NextResponse.json({ error: "The revision has already been published." }, { status: 409 });
+      if (revision.status === "rejected") return NextResponse.json({ error: "Rejected revisions cannot be published." }, { status: 409 });
+      if (!revision.approvals.some((approval) => approval.decision === "approved")) return NextResponse.json({ error: "At least one collaborator must approve before publishing." }, { status: 409 });
       await idempotent(key, async () => {
         await recordActivity("revision.publish_requested", collaborator, revisionId, `${collaborator.displayName} requested publication of revision v${revision.version}.`);
         return { ok: true };
@@ -155,11 +156,12 @@ export async function POST(request: Request) {
     }
 
     if (action === "publish_revision") {
-      if (collaborator.role !== "owner") return NextResponse.json({ error: "Only the workspace owner can publish." }, { status: 403 });
       const revisionId = readString(body, "revisionId", { max: 120 })!;
       const revision = await getRevision(revisionId);
       if (!revision) return NextResponse.json({ error: "Revision not found." }, { status: 404 });
-      if (revision.status !== "approved") return NextResponse.json({ error: "Every active collaborator must approve before publishing." }, { status: 409 });
+      if (revision.status === "published") return NextResponse.json({ error: "The revision has already been published." }, { status: 409 });
+      if (revision.status === "rejected") return NextResponse.json({ error: "Rejected revisions cannot be published." }, { status: 409 });
+      if (!revision.approvals.some((approval) => approval.decision === "approved")) return NextResponse.json({ error: "At least one collaborator must approve before publishing." }, { status: 409 });
       const afterScreenshot = validateScreenshot(body.afterScreenshot);
       const result = await idempotent(key, async () => {
         const now = Date.now();

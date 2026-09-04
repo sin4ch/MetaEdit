@@ -92,10 +92,10 @@ export async function readWorkspaceState(currentCollaboratorId: string | null, p
   const [workspaceResult, collaboratorsResult, annotationsResult, revisionsResult, approvalsResult, activityResult] = await d1.batch([
     d1.prepare(`SELECT * FROM workspaces WHERE id = ?`).bind(WORKSPACE_ID),
     d1.prepare(`SELECT * FROM collaborators WHERE workspace_id = ? AND last_seen_at >= ? ORDER BY created_at`).bind(WORKSPACE_ID, Date.now() - ACTIVE_WINDOW_MS),
-    d1.prepare(publicOnly ? `SELECT * FROM annotations WHERE 1 = 0` : `SELECT annotations.*, collaborators.color AS author_color FROM annotations LEFT JOIN collaborators ON collaborators.id = annotations.author_id AND collaborators.workspace_id = annotations.workspace_id WHERE annotations.workspace_id = ? ORDER BY annotations.created_at DESC LIMIT 200`).bind(...(publicOnly ? [] : [WORKSPACE_ID])),
+    d1.prepare(publicOnly ? `SELECT * FROM annotations WHERE 1 = 0` : `SELECT annotations.*, collaborators.color AS author_color FROM annotations LEFT JOIN collaborators ON collaborators.id = annotations.author_id AND collaborators.workspace_id = annotations.workspace_id WHERE annotations.workspace_id = ? ORDER BY annotations.created_at DESC`).bind(...(publicOnly ? [] : [WORKSPACE_ID])),
     d1.prepare(publicOnly ? `SELECT * FROM revisions WHERE workspace_id = ? AND status = 'published' ORDER BY version` : `SELECT revisions.*, collaborators.color AS author_color FROM revisions LEFT JOIN collaborators ON collaborators.id = revisions.author_id AND collaborators.workspace_id = revisions.workspace_id WHERE revisions.workspace_id = ? ORDER BY revisions.version`).bind(WORKSPACE_ID),
     d1.prepare(publicOnly ? `SELECT * FROM approvals WHERE 1 = 0` : `SELECT * FROM approvals ORDER BY created_at`).bind(),
-    d1.prepare(publicOnly ? `SELECT * FROM activity_events WHERE 1 = 0` : `SELECT * FROM activity_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200`).bind(...(publicOnly ? [] : [WORKSPACE_ID])),
+    d1.prepare(publicOnly ? `SELECT * FROM activity_events WHERE 1 = 0` : `SELECT * FROM activity_events WHERE workspace_id = ? ORDER BY created_at DESC`).bind(...(publicOnly ? [] : [WORKSPACE_ID])),
   ]);
   const workspace = workspaceResult.results[0] as Row;
   const collaborators = (collaboratorsResult.results as Row[]).map(mapCollaborator);

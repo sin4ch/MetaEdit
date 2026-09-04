@@ -9,7 +9,7 @@
 - [x] WebMCP tools for reading annotations, inspecting targets, proposing safe patches, reviewing, publishing, and focusing the page.
 - [x] Attribution, timestamps, selector/style snapshots, freeform region metadata, versioned previews, approvals, and before/after comparison.
 - [x] Live collaborator cursors over a Cloudflare Durable Object WebSocket, with an HTTP heartbeat fallback.
-- [x] Owner confirmation before publishing, publish activity notification, spinner/completion state, and a pull-request link.
+- [x] Confirmation after approval, publish activity notification, spinner/completion state, and a pull-request link.
 - [x] GitHub branch/commit/PR integration with a revision manifest and cropped before/after evidence when available.
 - [x] Cloudflare Worker + D1 deployment and custom hostnames: visitor page at <https://me.sin4.ch> and editor at <https://metaedit.me.sin4.ch>.
 
@@ -19,7 +19,7 @@
 - [ ] Open <https://me.sin4.ch> to verify visitor mode, then open <https://metaedit.me.sin4.ch>, enter any display name, choose **Use demo token**, and use `WEBMCP` if needed.
 - [ ] In a WebMCP-enabled Chrome/Codex browser, call `metaedit_list_annotations`, inspect one annotation, and propose a text/style patch.
 - [ ] Open a second browser session and confirm both sessions see collaborator names and live cursor movement.
-- [ ] Approve the revision from every active collaborator; confirm Publish is disabled until the approval requirement is met.
+- [ ] Approve the revision once; confirm Publish appears after the first approval.
 - [ ] Confirm the publish warning, spinner, completion tick, PR link, manifest, and before/after screenshot files in GitHub.
 - [ ] Confirm leaving MetaEdit returns to visitor mode while the published preview remains visible.
 - [ ] Run `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `npx vinext check`.

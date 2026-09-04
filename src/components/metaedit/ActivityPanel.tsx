@@ -128,22 +128,25 @@ export function ActivityPanel({ open, onClose, anchorRef, state, comparison, onF
 
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pt-10">
             {entries.length === 0 && <div className="grid min-h-48 place-items-center text-center"><div><MessageSquareText className="mx-auto size-6 text-[#b5b5b5]" /><p className="mt-2 text-sm font-medium">No activity yet</p><p className="mx-auto mt-1 max-w-56 text-xs leading-relaxed text-[#6e6e6e]">Select an element to leave the first annotation.</p></div></div>}
-            {entries.map((entry) => (
-              <ChangeCard
-                key={entry.id}
-                annotation={entry.annotation}
-                revision={entry.revision}
-                compareMode={entry.revision && compareId === entry.revision.id ? compareMode : null}
-                onCompare={entry.revision ? () => { if (entry.annotation) handleFocus(entry.annotation); toggleComparison(entry.revision!.id); } : undefined}
-                onFocus={handleFocus}
-                onReview={onReview}
-                onPublish={onPublish}
-                isOwner={state?.currentCollaborator?.role === "owner"}
-                currentCollaboratorId={state?.currentCollaborator?.id}
-                authorColor={entry.revision?.authorColor ?? entry.annotation?.authorColor ?? collaboratorById.get(entry.revision?.authorId ?? entry.annotation?.authorId ?? "")?.color}
-                publishing={Boolean(entry.revision && (entry.revision.publishStatus === "creating" || publishingRevisionId === entry.revision.id))}
-              />
-            ))}
+            {entries.map((entry, index) => {
+              const previousEntry = entries[index - 1];
+              const startsDay = !previousEntry || dayKey(previousEntry.createdAt) !== dayKey(entry.createdAt);
+              return <React.Fragment key={entry.id}>
+                {startsDay && <div className="px-1 pt-2 text-center text-[10px] font-medium text-[#8f8f8f]" role="separator">{formatDayLabel(entry.createdAt)}</div>}
+                <ChangeCard
+                  annotation={entry.annotation}
+                  revision={entry.revision}
+                  compareMode={entry.revision && compareId === entry.revision.id ? compareMode : null}
+                  onCompare={entry.revision ? () => { if (entry.annotation) handleFocus(entry.annotation); toggleComparison(entry.revision!.id); } : undefined}
+                  onFocus={handleFocus}
+                  onReview={onReview}
+                  onPublish={onPublish}
+                  currentCollaboratorId={state?.currentCollaborator?.id}
+                  authorColor={entry.revision?.authorColor ?? entry.annotation?.authorColor ?? collaboratorById.get(entry.revision?.authorId ?? entry.annotation?.authorId ?? "")?.color}
+                  publishing={Boolean(entry.revision && (entry.revision.publishStatus === "creating" || publishingRevisionId === entry.revision.id))}
+                />
+              </React.Fragment>;
+            })}
           </div>
         </motion.div>
       )}
@@ -151,7 +154,7 @@ export function ActivityPanel({ open, onClose, anchorRef, state, comparison, onF
   );
 }
 
-function ChangeCard({ annotation, revision, compareMode, onCompare, onFocus, onReview, onPublish, isOwner, currentCollaboratorId, authorColor, publishing }: { annotation?: Annotation; revision?: Revision; compareMode: CompareMode | null; onCompare?: () => void; onFocus: (annotation: Annotation) => void; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; isOwner: boolean; currentCollaboratorId?: string; authorColor?: string; publishing: boolean }) {
+function ChangeCard({ annotation, revision, compareMode, onCompare, onFocus, onReview, onPublish, currentCollaboratorId, authorColor, publishing }: { annotation?: Annotation; revision?: Revision; compareMode: CompareMode | null; onCompare?: () => void; onFocus: (annotation: Annotation) => void; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; currentCollaboratorId?: string; authorColor?: string; publishing: boolean }) {
   const currentDecision = revision?.approvals.find((item) => item.collaboratorId === currentCollaboratorId)?.decision;
   const operations = compareMode === "before" ? revision?.before : revision?.patch;
   const authorName = revision?.authorName ?? annotation?.authorName ?? "Collaborator";
@@ -189,25 +192,25 @@ function ChangeCard({ annotation, revision, compareMode, onCompare, onFocus, onR
           </div>
         </div>
       )}
-      {revision && <RevisionActions revision={revision} compareMode={compareMode} onCompare={onCompare} currentDecision={currentDecision} onReview={onReview} onPublish={onPublish} isOwner={isOwner} publishing={publishing} />}
+      {revision && <RevisionActions revision={revision} compareMode={compareMode} onCompare={onCompare} currentDecision={currentDecision} onReview={onReview} onPublish={onPublish} publishing={publishing} />}
     </div>}
 
     {compareMode && operations && <div className="ml-4 rounded-2xl bg-[#f6f6f6] px-3 py-2"><p className="text-[10px] font-medium text-[#505050]">Showing {compareMode}</p><PatchSummary operations={operations} /></div>}
   </article>;
 }
 
-function RevisionActions({ revision, compareMode, onCompare, currentDecision, onReview, onPublish, isOwner, publishing }: { revision: Revision; compareMode: CompareMode | null; onCompare?: () => void; currentDecision?: "approved" | "rejected"; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; isOwner: boolean; publishing: boolean }) {
+function RevisionActions({ revision, compareMode, onCompare, currentDecision, onReview, onPublish, publishing }: { revision: Revision; compareMode: CompareMode | null; onCompare?: () => void; currentDecision?: "approved" | "rejected"; onReview: (id: string, decision: "approved" | "rejected") => void; onPublish: (id: string) => void; publishing: boolean }) {
   const nextComparison = compareMode === "before" ? "after" : compareMode === "after" ? "preview" : "before";
   const hasApproval = revision.approvals.some((approval) => approval.decision === "approved");
-  const canPublish = isOwner && hasApproval && revision.status === "approved" && !publishing;
+  const canPublish = hasApproval && revision.status !== "published" && revision.status !== "rejected" && !publishing;
   return <div className="flex shrink-0 items-center gap-1">
-    {onCompare && <button type="button" onClick={onCompare} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", compareMode ? "bg-[#305dde] text-white" : "bg-[#f3f3f3] text-[#191919]")} aria-label={`Show ${nextComparison} for this revision`} title={`Show ${nextComparison}`}><Eye className="size-3" /></button>}
+    {onCompare && <button type="button" onClick={onCompare} className={cn("flex size-7 cursor-pointer items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", compareMode ? "bg-[#305dde] text-white" : "bg-[#f3f3f3] text-[#191919]")} aria-label={`Show ${nextComparison} for this revision`} title={`Show ${nextComparison}`}><Eye className="size-3" /></button>}
     {revision.status !== "published" && <>
-      <button type="button" onClick={() => onReview(revision.id, "approved")} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-[#f3f3f3] text-[#191919]")} aria-label="Approve revision" title="Approve revision"><Check className="size-3" /></button>
-      <button type="button" onClick={() => onReview(revision.id, "rejected")} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "rejected" ? "bg-rose-100 text-rose-700" : "bg-[#f3f3f3] text-[#505050]")} aria-label="Reject revision" title="Reject revision"><X className="size-3" /></button>
+      <button type="button" onClick={() => onReview(revision.id, "approved")} className={cn("flex size-7 cursor-pointer items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "approved" ? "bg-emerald-100 text-emerald-800" : "bg-[#f3f3f3] text-[#191919]")} aria-label="Approve revision" title="Approve revision"><Check className="size-3" /></button>
+      <button type="button" onClick={() => onReview(revision.id, "rejected")} className={cn("flex size-7 cursor-pointer items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", currentDecision === "rejected" ? "bg-rose-100 text-rose-700" : "bg-[#f3f3f3] text-[#505050]")} aria-label="Reject revision" title="Reject revision"><X className="size-3" /></button>
     </>}
-    {isOwner && hasApproval && revision.status !== "published" && <button type="button" onClick={() => canPublish && onPublish(revision.id)} disabled={!canPublish} className={cn("flex size-7 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", canPublish ? "bg-[#191919] text-white hover:bg-[#303030]" : "bg-[#f3f3f3] text-[#8f8f8f] cursor-not-allowed")} aria-label={publishing ? "Creating pull request" : canPublish ? "Publish revision" : "Waiting for all approvals"} title={publishing ? "Creating pull request" : canPublish ? "Publish revision" : "Waiting for all approvals"}>{publishing ? <LoaderCircle className="size-3 animate-spin" /> : <Rocket className="size-3" />}</button>}
-    {revision.publishStatus === "ready" && revision.githubPrUrl && <a href={revision.githubPrUrl} target="_blank" rel="noreferrer" className="flex size-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 transition hover:bg-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40" aria-label={`Open pull request #${revision.githubPrNumber ?? ""}`} title={`Open pull request #${revision.githubPrNumber ?? ""}`}><ExternalLink className="size-3" /></a>}
+    {hasApproval && revision.status !== "published" && revision.status !== "rejected" && <button type="button" onClick={() => canPublish && onPublish(revision.id)} disabled={!canPublish} className={cn("flex size-7 cursor-pointer items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40", canPublish ? "bg-[#191919] text-white hover:bg-[#303030]" : "bg-[#f3f3f3] text-[#8f8f8f] cursor-not-allowed")} aria-label={publishing ? "Creating pull request" : canPublish ? "Publish revision" : "Waiting for approval"} title={publishing ? "Creating pull request" : canPublish ? "Publish revision" : "Waiting for approval"}>{publishing ? <LoaderCircle className="size-3 animate-spin" /> : <Rocket className="size-3" />}</button>}
+    {revision.publishStatus === "ready" && revision.githubPrUrl && <a href={revision.githubPrUrl} target="_blank" rel="noreferrer" className="flex size-7 cursor-pointer items-center justify-center rounded-full bg-emerald-100 text-emerald-800 transition hover:bg-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#305dde]/40" aria-label={`Open pull request #${revision.githubPrNumber ?? ""}`} title={`Open pull request #${revision.githubPrNumber ?? ""}`}><ExternalLink className="size-3" /></a>}
   </div>;
 }
 
@@ -221,3 +224,19 @@ function getReaction(annotation?: Annotation, revision?: Revision) {
   return null;
 }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+function dayKey(value: string) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+function formatDayLabel(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  const today = dayKey(now.toISOString());
+  const yesterdayDate = new Date(now);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = dayKey(yesterdayDate.toISOString());
+  const key = dayKey(value);
+  if (key === today) return "Today";
+  if (key === yesterday) return "Yesterday";
+  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}

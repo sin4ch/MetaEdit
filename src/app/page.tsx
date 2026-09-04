@@ -833,7 +833,7 @@ export default function MetaEditPage() {
             {[
               {
                 q: "How does MetaEdit actually change my site?",
-                a: "When you annotate an element, MetaEdit records a stable selector plus its text and style snapshot. Your WebMCP-capable browser agent reads that context and proposes a constrained UI revision. The revision stays in preview until collaborators approve it and the owner publishes it.",
+                a: "When you annotate an element, MetaEdit records a stable selector plus its text and style snapshot. Your WebMCP-capable browser agent reads that context and proposes a constrained UI revision. The revision stays in preview until a collaborator approves it and an authenticated collaborator publishes it.",
               },
               {
                 q: "Do regular visitors see the editor or cursors?",
@@ -841,7 +841,7 @@ export default function MetaEditPage() {
               },
               {
                 q: "Does MetaEdit push changes to my Git repository?",
-                a: "Yes, but only after review. The owner confirms publication, then MetaEdit creates a branch, commits the structured patch and before/after evidence, and opens a GitHub pull request. The preview remains visible in the workspace while the pull request goes through your normal engineering review.",
+                a: "Yes, but only after review. Once a collaborator approves, MetaEdit asks for confirmation, creates a branch, commits the structured patch and before/after evidence, and opens a GitHub pull request. The preview remains visible in the workspace while the pull request goes through your normal engineering review.",
               },
               {
                 q: "What happens if two teammates edit the same element at once?",
