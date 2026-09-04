@@ -19,6 +19,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
   const [token, setToken] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const isEditorHost = typeof window !== "undefined" && window.location.hostname.startsWith("metaedit.");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +50,7 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} className="max-w-md rounded-lg bg-[#ffffff] border border-[#191919]/10 p-7 shadow-[0_20px_50px_rgba(0,0,0,0.14)]">
+    <Modal open={open} onClose={onClose} dismissible={!isEditorHost} className="max-w-md rounded-lg bg-[#ffffff] border border-[#191919]/10 p-7 shadow-[0_20px_50px_rgba(0,0,0,0.14)]">
       <div className="flex flex-col gap-6">
         {/* Header: Clean Logo + Title + Close Button */}
         <div className="flex items-start justify-between gap-4">
@@ -62,14 +63,14 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
               </p>
             </div>
           </div>
-          <button
+          {!isEditorHost && <button
             type="button"
             onClick={onClose}
             className="flex size-8 items-center justify-center rounded-full text-[#8f8f8f] hover:text-[#191919] hover:bg-[#f6f6f6] transition-colors cursor-pointer"
             aria-label="Close"
           >
             <Cancel01Icon className="size-4" />
-          </button>
+          </button>}
         </div>
 
         {/* Inputs Form */}
@@ -119,13 +120,13 @@ export function AccessModal({ open, onClose, onSuccess }: AccessModalProps) {
 
           {/* Action Row */}
           <div className="mt-2 flex items-center justify-end gap-2.5 pt-1">
-            <button
+            {!isEditorHost && <button
               type="button"
               onClick={onClose}
               className="h-10 pl-4 pr-4 rounded-full text-sm font-medium text-[#6e6e6e] hover:bg-[#f6f6f6] hover:text-[#191919] transition-colors cursor-pointer"
             >
               Cancel
-            </button>
+            </button>}
             <Button
               type="submit"
               loading={loading}

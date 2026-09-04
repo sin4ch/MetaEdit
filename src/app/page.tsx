@@ -228,6 +228,11 @@ export default function MetaEditPage() {
     setIsInspecting(false);
     setActivityOpen(false);
     setComparison(null);
+    const visitorUrl = getVisitorUrl(window.location.href);
+    if (visitorUrl) {
+      window.location.replace(visitorUrl);
+      return;
+    }
     addToast("Visitor Mode", "Exited MetaEdit workspace. Back to visitor mode.", "info");
   };
 
@@ -968,4 +973,18 @@ export default function MetaEditPage() {
 
 function waitForPaint() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
+function getVisitorUrl(currentHref: string): string | null {
+  const url = new URL(currentHref);
+  let changed = false;
+  if (url.hostname.startsWith("metaedit.")) {
+    url.hostname = url.hostname.slice("metaedit.".length);
+    changed = true;
+  }
+  if (url.searchParams.has("metaedit")) {
+    url.searchParams.delete("metaedit");
+    changed = true;
+  }
+  return changed ? url.toString() : null;
 }

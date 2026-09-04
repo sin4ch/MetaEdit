@@ -10,20 +10,22 @@ export function Modal({
   onClose,
   children,
   className,
+  dismissible = true,
 }: {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
   className?: string;
+  dismissible?: boolean;
 }) {
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !dismissible) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [dismissible, open, onClose]);
 
   return (
     <AnimatePresence>
@@ -34,15 +36,25 @@ export function Modal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.15 } }}
         >
-          <motion.button
-            aria-label="Close backdrop"
-            type="button"
-            onClick={onClose}
-            className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.15 } }}
-            exit={{ opacity: 0, transition: { duration: 0.15 } }}
-          />
+          {dismissible ? (
+            <motion.button
+              aria-label="Close backdrop"
+              type="button"
+              onClick={onClose}
+              className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15 } }}
+              exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            />
+          ) : (
+            <motion.div
+              aria-hidden="true"
+              className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15 } }}
+              exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            />
+          )}
           <motion.div
             role="dialog"
             aria-modal="true"
