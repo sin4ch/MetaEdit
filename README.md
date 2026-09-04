@@ -2,11 +2,7 @@
 
 ## Edit software from inside the software
 
-MetaEdit turns a live website into a collaborative review space.
-
-A visitor sees the normal site. A collaborator adds `metaedit.` to the site's hostname, enters the shared access token, and can point at any part of the page. They write what should change. A browser agent reads that request through WebMCP, proposes a safe preview, and leaves the final decision with the people reviewing the page.
-
-The team can see each other's names and cursors, compare the current page with a proposed result, approve or reject the change, and open a GitHub pull request from the same screen. The public page changes only after the team chooses to publish.
+MetaEdit creates a collaborative workspace right inside the website. When regular people see a normal landing page, those who know (those with the access token, `WEBMCP`) can access a whole UI hidden on top of the regular website that they can annotate for changes, feed to a WebMCP compatible agent, and then ship PRs, all while having the website open.
 
 I was heavily inspired by [React Grab](https://www.react-grab.com/) by [Aiden Bai](https://www.aidenybai.com/)
 
@@ -16,10 +12,10 @@ I was heavily inspired by [React Grab](https://www.react-grab.com/) by [Aiden Ba
 - [Open the visitor site](https://me.sin4.ch/)
 - [Open the MetaEdit workspace](https://metaedit.me.sin4.ch/)
 
-Demo access:
+You'll need to enter:
 
-- **Name:** any name, such as `Alex Rivera`
-- **Token:** `WEBMCP`
+- Your name, and
+- the demo token `WEBMCP`
 
 ### How to use it
 
@@ -30,8 +26,6 @@ Demo access:
 5. Open **Activity**. Use the eye button to switch between the current page and the proposed result.
 6. Approve the revision. After one approval, the rocket appears. Confirm it to create the pull request.
 7. Open the GitHub link on the activity entry to review the branch, patch, manifest, and before/after evidence.
-
-The activity feed keeps the author, target, time, reactions, approvals, and revision history together.
 
 ## Why WebMCP matters here
 
@@ -45,15 +39,7 @@ The agent can:
 4. let people review it in the page; and
 5. publish the approved result through the same tool surface.
 
-The agent does not need to clone the repository to understand the request or produce the preview. Publishing uses the server-side GitHub API to create the review branch and pull request.
-
-## What the product protects
-
-- **Visitors stay visitors.** The editor, cursors, inspector, and WebMCP tools appear only in the authenticated MetaEdit workspace.
-- **The page supplies context.** Each annotation remembers the selected part, what it looked like, what the person asked for, and who asked.
-- **Agents get a narrow edit contract.** A revision can change text, styling, or visibility in the selected area. It cannot inject scripts, arbitrary code, or changes somewhere else on the page.
-- **People stay in control.** A revision is a preview until a collaborator approves it. Publishing asks for confirmation and then opens a pull request.
-- **The workspace remembers.** Annotations, revisions, approvals, activity, and published versions are stored durably. Presence and cursors are live, but leaving the workspace does not remove the record of what happened.
+The agent doesn't need to clone the repository to understand the request or produce the preview. WebMCP powers this. Pushing the PR uses the server-side GitHub API to create the review branch and pull request.
 
 ## Technical notes
 
@@ -95,8 +81,6 @@ After authentication, the page registers these tools on the browser's `document.
 | `metaedit_review_revision` | Records an approval or rejection. |
 | `metaedit_publish_revision` | Opens a GitHub pull request after at least one approval. |
 | `metaedit_focus_target` | Scrolls to and highlights an annotated target for the human reviewer. |
-
-Mutating calls use idempotency keys. The server authenticates every privileged action and treats annotation text, selectors, and agent-provided content as untrusted input.
 
 ## License
 
